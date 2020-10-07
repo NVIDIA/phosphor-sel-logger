@@ -42,6 +42,9 @@ using SELCreated =
     sdbusplus::xyz::openbmc_project::Logging::SEL::Error::Created;
 #endif
 
+// Keep track for reaching max sel events
+bool maxSELEntriesReached = false;
+
 struct DBusInternalError final : public sdbusplus::exception_t
 {
     const char* name() const noexcept override
@@ -79,6 +82,85 @@ static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
     std::sort(selLogFiles.begin(), selLogFiles.end());
 
     return !selLogFiles.empty();
+}
+
+static bool isLinearSELPolicy()
+{
+    auto bus = sdbusplus::bus::new_default();
+
+    try
+    {
+        // IPMI SEL Policy Object
+        auto method = bus.new_method_call(selLogObj, selLogPath,
+                        "org.freedesktop.DBus.Properties", "Get");
+        method.append(selLogIntf, "SelPolicy");
+        auto reply = bus.call(method);
+        if (reply.is_method_error())
+        {
+            phosphor::logging::log<phosphor::logging::level::ERR>(
+                "isLinearSELPolicy: Failed to read sel policy",
+                phosphor::logging::entry("PATH=%s", selLogPath),
+                phosphor::logging::entry("INTERFACE=%s", selLogIntf));
+            return false;
+        }
+
+        std::variant<std::string> value;
+        reply.read(value);
+
+        if (std::get<std::string>(value) ==
+            "xyz.openbmc_project.Logging.Settings.Policy.Linear")
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    catch (std::exception& e)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "isLinearSELPolicy: Failed to get sel policy",
+            phosphor::logging::entry("EXCEPTION=%s", e.what()));
+        return false;
+    }
+}
+
+static std::string getSELEventStr(unsigned int recordId, std::string selDataStr,
+                                  uint16_t genId, std::string path, bool assert)
+{
+    // The format of the ipmi_sel message is:
+    // "<Timestamp> <ID>,<Type>,<EventData>,[<Generator ID>,<Path>,<Direction>]"
+
+    // Get the timestamp
+    time_t t;
+    struct tm *tmp;
+    char timestamp[30];
+    time( &t );
+    tmp = localtime( &t );
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", tmp);
+
+    // Create SEL event string
+    char b [50];
+    int ret = sprintf(b, "%s %d,%x,%s,%x,%s,%x",
+                         timestamp,
+                         recordId,
+                         selSystemType,
+                         selDataStr.c_str(),
+                         genId,
+                         path.c_str(),
+                         assert);
+    // Check for valid buffer
+    if (ret > 0)
+    {
+        return b;
+    }
+    else
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSELEventStr: Failed to format SEL event string");
+        return "";
+    }
 }
 
 static unsigned int initializeRecordId(void)
@@ -126,6 +208,15 @@ static unsigned int getNewRecordId(void)
     {
         recordId = 1;
     }
+    // Update max sel entry reached once recordId crosses maxSELEntries
+    if (recordId > maxSELEntries)
+    {
+        maxSELEntriesReached = true;
+    }
+    else
+    {
+        maxSELEntriesReached = false;
+    }
     return recordId;
 }
 #endif
@@ -139,6 +230,94 @@ static void toHexStr(const std::vector<uint8_t>& data, std::string& hexStr)
         stream << std::setw(2) << v;
     }
     hexStr = stream.str();
+}
+
+static void circularConfEventsRotate(std::filesystem::path selLogFile)
+{
+    std::string line;
+    std::ifstream fromStream(selLogFile);
+    if (!fromStream.is_open())
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "circularConfEventsRotate: Failed to open SEL log file");
+        return;
+    }
+    std::ofstream toStream;
+    std::filesystem::path selLogFileBackup = selLogDir / "ipmi_sel_backup";
+    toStream.open(selLogFileBackup, std::ios_base::app | std::ios_base::out);
+    // Skip the first line
+    getline(fromStream, line);
+    while( getline(fromStream, line) )
+    {
+        toStream << line << "\n";
+    }
+    // Close files
+    fromStream.close();
+    toStream.close();
+    // Replace original file
+    remove(selLogFile);
+    rename(selLogFileBackup, selLogFile);
+
+    return;
+}
+
+static void writeSELEvent(unsigned int recordId, std::string selDataStr,
+                          uint16_t genId, std::string path, bool assert)
+{
+    // Skip event write for Max SEL entries with linear config
+    if (maxSELEntriesReached && isLinearSELPolicy())
+    {
+        // Skip an event write
+        phosphor::logging::log<phosphor::logging::level::DEBUG>(
+           "writeSELEvent: Linear config, skipping SEL event write");
+        return;
+    }
+
+    // Write the event
+    // Format the SEL event string
+    std::string selStr = getSELEventStr(recordId, selDataStr, genId,
+                            path, assert);
+    if (selStr.empty())
+    {
+        // No write for empty string
+        return;
+    }
+
+    // Get the SEL event log file
+    std::vector<std::filesystem::path> selLogFiles;
+    std::filesystem::path selLogFile;
+    if (!getSELLogFiles(selLogFiles))
+    {
+        // Create the file
+        phosphor::logging::log<phosphor::logging::level::DEBUG>(
+            "writeSELEvent: Creating SEL log file");
+        selLogFile = selLogDir / selLogFilename;
+    }
+    else
+    {
+        selLogFile = selLogFiles.front();
+    }
+    // Write the event to SEL log file
+    std::ofstream logStream(selLogFile, std::ios_base::app | std::ios_base::out);
+    if (!logStream.is_open())
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+           "writeSELEvent: Failed to open SEL log file");
+        return;
+    }
+    logStream<<selStr<<'\n';
+    logStream.close();
+
+    // Check for Max SEL entries for circular config
+    if (maxSELEntriesReached && !isLinearSELPolicy())
+    {
+        // Delete the first event
+        phosphor::logging::log<phosphor::logging::level::DEBUG>(
+            "writeSELEvent: Circular config, deleting first SEL event");
+        circularConfEventsRotate(selLogFile);
+    }
+
+    return;
 }
 
 template <typename... T>
@@ -171,6 +350,10 @@ static uint16_t
                     "IPMI_SEL_SENSOR_PATH=%s", path.c_str(),
                     "IPMI_SEL_EVENT_DIR=%x", assert, "IPMI_SEL_DATA=%s",
                     selDataStr.c_str(), std::forward<T>(metadata)..., NULL);
+
+    // Write SEL event record to ipmi_sel log file
+    writeSELEvent(recordId, selDataStr, genId, path, assert);
+
     return recordId;
 #endif
 }

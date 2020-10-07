@@ -21,6 +21,10 @@ static constexpr char const* ipmiSelObject = "xyz.openbmc_project.Logging.IPMI";
 static constexpr char const* ipmiSelPath = "/xyz/openbmc_project/Logging/IPMI";
 static constexpr char const* ipmiSelAddInterface =
     "xyz.openbmc_project.Logging.IPMI";
+// SEL policy in dbus
+static constexpr char const *selLogObj = "xyz.openbmc_project.Settings";
+static constexpr char const *selLogPath = "/xyz/openbmc_project/logging/settings";
+static constexpr char const *selLogIntf = "xyz.openbmc_project.Logging.Settings";
 
 // ID string generated using journalctl to include in the MESSAGE_ID field for
 // SEL entries.  Helps with filtering SEL entries in the journal.
@@ -33,6 +37,8 @@ static constexpr uint16_t selInvalidRecID =
 static constexpr size_t selEvtDataMaxSize = 3;
 static constexpr size_t selOemDataMaxSize = 13;
 static constexpr uint8_t selEvtDataUnspecified = 0xFF;
+// Max 3K SEL entries
+static constexpr int maxSELEntries = 3000;
 
 static const std::filesystem::path selLogDir = "/var";
 static const std::string selLogFilename = "ipmi_sel";
