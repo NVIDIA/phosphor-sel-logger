@@ -190,7 +190,14 @@ static unsigned int initializeRecordId(void)
         return selInvalidRecID;
     }
 
-    return std::stoul(newestEntryFields[1]);
+    unsigned int id = std::stoul(newestEntryFields[1]);
+    // Update max sel entry reached flag on startup
+    if (id >= maxSELEntries)
+    {
+        maxSELEntriesReached = true;
+    }
+
+    return id;
 }
 
 static unsigned int getNewRecordId(void)
@@ -202,6 +209,14 @@ static unsigned int getNewRecordId(void)
     if (!getSELLogFiles(selLogFiles))
     {
         recordId = selInvalidRecID;
+    }
+
+    // Do not increase recordID on reaching maxSELEntries in linear sel config
+    if (maxSELEntriesReached && isLinearSELPolicy())
+    {
+        phosphor::logging::log<phosphor::logging::level::INFO>(
+            "Skip SEL event write on reaching max SEL entries in linear config");
+        return 0;
     }
 
     if (++recordId >= selInvalidRecID)
@@ -264,15 +279,6 @@ static void circularConfEventsRotate(std::filesystem::path selLogFile)
 static void writeSELEvent(unsigned int recordId, std::string selDataStr,
                           uint16_t genId, std::string path, bool assert)
 {
-    // Skip event write for Max SEL entries with linear config
-    if (maxSELEntriesReached && isLinearSELPolicy())
-    {
-        // Skip an event write
-        phosphor::logging::log<phosphor::logging::level::DEBUG>(
-           "writeSELEvent: Linear config, skipping SEL event write");
-        return;
-    }
-
     // Write the event
     // Format the SEL event string
     std::string selStr = getSELEventStr(recordId, selDataStr, genId,
@@ -312,8 +318,8 @@ static void writeSELEvent(unsigned int recordId, std::string selDataStr,
     if (maxSELEntriesReached && !isLinearSELPolicy())
     {
         // Delete the first event
-        phosphor::logging::log<phosphor::logging::level::DEBUG>(
-            "writeSELEvent: Circular config, deleting first SEL event");
+        phosphor::logging::log<phosphor::logging::level::INFO>(
+            "Remove first SEL event on reaching max SEL entries in circular config");
         circularConfEventsRotate(selLogFile);
     }
 
@@ -352,7 +358,10 @@ static uint16_t
                     selDataStr.c_str(), std::forward<T>(metadata)..., NULL);
 
     // Write SEL event record to ipmi_sel log file
-    writeSELEvent(recordId, selDataStr, genId, path, assert);
+    if (recordId != 0)
+    {
+        writeSELEvent(recordId, selDataStr, genId, path, assert);
+    }
 
     return recordId;
 #endif
