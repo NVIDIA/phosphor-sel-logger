@@ -43,7 +43,7 @@ using SELCreated =
 #endif
 
 // Keep track for reaching max sel events
-bool maxSELEntriesReached = false;
+static bool maxSELEntriesReached = false;
 
 struct DBusInternalError final : public sdbusplus::exception_t
 {
@@ -223,15 +223,6 @@ static unsigned int getNewRecordId(void)
     {
         recordId = 1;
     }
-    // Update max sel entry reached once recordId crosses maxSELEntries
-    if (recordId > maxSELEntries)
-    {
-        maxSELEntriesReached = true;
-    }
-    else
-    {
-        maxSELEntriesReached = false;
-    }
     return recordId;
 }
 #endif
@@ -361,6 +352,15 @@ static uint16_t
     if (recordId != 0)
     {
         writeSELEvent(recordId, selDataStr, genId, path, assert);
+        // Update max sel entry reached once recordId crosses maxSELEntries
+        if (recordId >= maxSELEntries)
+        {
+            maxSELEntriesReached = true;
+        }
+        else
+        {
+            maxSELEntriesReached = false;
+        }
     }
 
     return recordId;
