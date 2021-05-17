@@ -24,6 +24,9 @@
 #include <sel_logger.hpp>
 #include <threshold_event_monitor.hpp>
 #include <watchdog_event_monitor.hpp>
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/elog.hpp>
+#include <phosphor-logging/log.hpp>
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS
 #include <threshold_alarm_event_monitor.hpp>
 #endif
@@ -35,9 +38,6 @@
 #include <sstream>
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-#include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/elog.hpp>
-#include <phosphor-logging/log.hpp>
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 
 using namespace phosphor::logging;
