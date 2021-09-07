@@ -19,6 +19,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/format.hpp>
 #include <pulse_event_monitor.hpp>
 #include <sdbusplus/asio/object_server.hpp>
 #include <sel_logger.hpp>
@@ -129,8 +130,8 @@ static bool isLinearSELPolicy()
     }
 }
 
-static std::string getSELEventStr(unsigned int recordId, std::string selDataStr,
-                                  uint16_t genId, std::string path, bool assert)
+static std::string getSELEventStr(const unsigned int& recordId, const std::string& selDataStr,
+                                  const uint16_t& genId, const std::string& path, const bool& assert)
 {
     // The format of the ipmi_sel message is:
     // "<Timestamp> <ID>,<Type>,<EventData>,[<Generator ID>,<Path>,<Direction>]"
@@ -144,26 +145,20 @@ static std::string getSELEventStr(unsigned int recordId, std::string selDataStr,
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", tmp);
 
     // Create SEL event string
-    char b [50];
-    int ret = sprintf(b, "%s %d,%x,%s,%x,%s,%x",
-                         timestamp,
-                         recordId,
-                         selSystemType,
-                         selDataStr.c_str(),
-                         genId,
-                         path.c_str(),
-                         assert);
-    // Check for valid buffer
-    if (ret > 0)
+    std::string selStr;
+    try
     {
-        return b;
+        selStr = (boost::format("%s %d,%d,%s,%x,%s,%x") % timestamp % recordId %
+            static_cast<size_t>(selSystemType) % selDataStr.c_str() % genId %
+            path.c_str() % assert)
+            .str();
     }
-    else
+    catch (...)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "getSELEventStr: Failed to format SEL event string");
-        return "";
     }
+    return selStr;
 }
 
 static unsigned int initializeRecordId(void)
@@ -270,8 +265,8 @@ static void circularConfEventsRotate(std::filesystem::path selLogFile)
     return;
 }
 
-static void writeSELEvent(unsigned int recordId, std::string selDataStr,
-                          uint16_t genId, std::string path, bool assert)
+static void writeSELEvent(const unsigned int& recordId, const std::string& selDataStr,
+                          const uint16_t& genId, const std::string& path, const bool& assert)
 {
     // Write the event
     // Format the SEL event string
