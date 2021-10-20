@@ -54,16 +54,21 @@ struct DBusInternalError final : public sdbusplus::exception_t
     const char* name() const noexcept override
     {
         return "org.freedesktop.DBus.Error.Failed";
-    };
+    }
     const char* description() const noexcept override
     {
         return "internal error";
-    };
+    }
     const char* what() const noexcept override
     {
         return "org.freedesktop.DBus.Error.Failed: "
                "internal error";
-    };
+    }
+
+    int get_errno() const noexcept override
+    {
+        return EACCES;
+    }
 };
 
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
@@ -198,8 +203,45 @@ static unsigned int initializeRecordId(void)
     return id;
 }
 
+#ifdef SEL_LOGGER_CLEARS_SEL
+static unsigned int recordId = initializeRecordId();
+
+void clearSelLogFiles()
+{
+    // Clear the SEL by deleting the log files
+    std::vector<std::filesystem::path> selLogFiles;
+    if (getSELLogFiles(selLogFiles))
+    {
+        for (const std::filesystem::path& file : selLogFiles)
+        {
+            std::error_code ec;
+            std::filesystem::remove(file, ec);
+        }
+    }
+
+    recordId = selInvalidRecID;
+
+    // Reload rsyslog so it knows to start new log files
+    boost::asio::io_service io;
+    auto dbus = std::make_shared<sdbusplus::asio::connection>(io);
+    sdbusplus::message::message rsyslogReload = dbus->new_method_call(
+        "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager", "ReloadUnit");
+    rsyslogReload.append("rsyslog.service", "replace");
+    try
+    {
+        sdbusplus::message::message reloadResponse = dbus->call(rsyslogReload);
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        std::cerr << e.what() << "\n";
+    }
+}
+#endif
+
 static unsigned int getNewRecordId(void)
 {
+#ifndef SEL_LOGGER_CLEARS_SEL
     static unsigned int recordId = initializeRecordId();
 
     // If the log has been cleared, also clear the current ID
@@ -208,6 +250,7 @@ static unsigned int getNewRecordId(void)
     {
         recordId = selInvalidRecID;
     }
+#endif
 
     // Do not increase recordID on reaching maxSELEntries in linear sel config
     if (maxSELEntriesReached && isLinearSELPolicy())
@@ -423,6 +466,13 @@ int main(int, char*[])
            const uint8_t& recordType) {
             return selAddOemRecord(message, selData, recordType);
         });
+
+#ifdef SEL_LOGGER_CLEARS_SEL
+#ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+    // Clear SEL entries
+    ifaceAddSel->register_method("Clear", []() { clearSelLogFiles(); });
+#endif
+#endif
     ifaceAddSel->initialize();
 
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_EVENTS
