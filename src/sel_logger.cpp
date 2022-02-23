@@ -47,8 +47,9 @@ using SELCreated =
 #endif
 
 // Keep track for reaching max sel events
+#ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 static bool maxSELEntriesReached = false;
-
+#endif
 struct DBusInternalError final : public sdbusplus::exception_t
 {
     const char* name() const noexcept override
@@ -135,6 +136,7 @@ static bool isLinearSELPolicy()
     }
 }
 
+#ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 static std::string getSELEventStr(const unsigned int& recordId, const std::string& selDataStr,
                                   const uint16_t& genId, const std::string& path, const bool& assert)
 {
@@ -165,6 +167,7 @@ static std::string getSELEventStr(const unsigned int& recordId, const std::strin
     }
     return selStr;
 }
+#endif
 
 static unsigned int initializeRecordId(void)
 {
@@ -278,7 +281,7 @@ static void toHexStr(const std::vector<uint8_t>& data, std::string& hexStr)
     }
     hexStr = stream.str();
 }
-
+#ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 static void circularConfEventsRotate(std::filesystem::path selLogFile)
 {
     std::string line;
@@ -307,6 +310,7 @@ static void circularConfEventsRotate(std::filesystem::path selLogFile)
 
     return;
 }
+
 
 static void writeSELEvent(const unsigned int& recordId, const std::string& selDataStr,
                           const uint16_t& genId, const std::string& path, const bool& assert)
@@ -357,6 +361,7 @@ static void writeSELEvent(const unsigned int& recordId, const std::string& selDa
 
     return;
 }
+#endif
 
 template <typename... T>
 static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
