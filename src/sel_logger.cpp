@@ -362,13 +362,46 @@ static void writeSELEvent(const unsigned int& recordId, const std::string& selDa
     return;
 }
 #endif
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+std::string getService(sdbusplus::bus::bus& bus, const std::string& path,
+                       const std::string& interface)
+{
+    auto method = bus.new_method_call(mapperBus, mapperPath, mapperInterface,
+                                      "GetObject");
 
+    method.append(path);
+    method.append(std::vector<std::string>({interface}));
+
+    auto reply = bus.call(method);
+
+    std::map<std::string, std::vector<std::string>> response;
+    reply.read(response);
+
+    if (response.empty())
+    {
+        log<level::ERR>("Error in mapper response for getting service name",
+                        entry("PATH=%s", path.c_str()),
+                        entry("INTERFACE=%s", interface.c_str()));
+        return std::string{};
+    }
+
+    return response.begin()->first;
+}
+#endif
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+static void selAddSystemRecord(const std::string& messageID,
+                               const std::string& message,
+                               const std::string& path,
+                               const std::vector<uint8_t>& selData,
+                               const bool& assert, const uint16_t& genId)
+#else
 template <typename... T>
 static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
                                    const std::string& path,
                                    const std::vector<uint8_t>& selData,
                                    const bool& assert, const uint16_t& genId,
                                    [[maybe_unused]] T&&... metadata)
+#endif
 {
     // Only 3 bytes of SEL event data are allowed in a system record
     if (selData.size() > selEvtDataMaxSize)
@@ -379,12 +412,33 @@ static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
     toHexStr(selData, selDataStr);
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-    using namespace xyz::openbmc_project::Logging::SEL;
-    auto entryID = report<SELCreated>(
-        Created::RECORD_TYPE(selSystemType), Created::GENERATOR_ID(genId),
-        Created::SENSOR_DATA(selDataStr.c_str()), Created::EVENT_DIR(assert),
-        Created::SENSOR_PATH(path.c_str()));
-    return static_cast<uint16_t>(entryID);
+
+    auto sevLvl = ErrLvl::Informational;
+    static auto bus = sdbusplus::bus::new_default();
+    std::map<std::string, std::string> addData;
+    addData["namespace"] = "SEL";
+    addData["REDFISH_MESSAGE_ID"] = messageID.c_str();
+    addData["REDFISH_MESSAGE_ARGS"] = message.c_str();
+    addData["SENSOR_DATA"] = selDataStr.c_str();
+    addData["SENSOR_PATH"] = path.c_str();
+    addData["EVENT_DIR"] = std::to_string(assert);
+    addData["GENERATOR_ID"] = std::to_string(genId);
+    addData["RECORD_TYPE"] = std::to_string(selSystemType);
+
+    try
+    {
+        auto service = getService(bus, logObjPath, logInterface);
+        auto method = bus.new_method_call(service.c_str(), logObjPath,
+                                          logInterface, "Create");
+        method.append(messageID, sevLvl, addData);
+        bus.call_noreply(method);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to create D-Bus log entry for SEL, ERROR="
+                  << e.what() << "\n";
+    }
+    return;
 #else
     unsigned int recordId = getNewRecordId();
     sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
@@ -456,7 +510,16 @@ int main(int, char*[])
     // Add SEL Interface
     std::shared_ptr<sdbusplus::asio::dbus_interface> ifaceAddSel =
         server.add_interface(ipmiSelPath, ipmiSelAddInterface);
-
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+    ifaceAddSel->register_method(
+        "IpmiSelAdd",
+        [](const std::string& messageID, const std::string& message,
+           const std::string& path, const std::vector<uint8_t>& selData,
+           const bool& assert, const uint16_t& genId) {
+            return selAddSystemRecord(messageID, message, path, selData, assert,
+                                      genId);
+        });
+#else
     // Add a new SEL entry
     ifaceAddSel->register_method(
         "IpmiSelAdd", [](const std::string& message, const std::string& path,
@@ -464,6 +527,7 @@ int main(int, char*[])
                          const bool& assert, const uint16_t& genId) {
             return selAddSystemRecord(message, path, selData, assert, genId);
         });
+#endif
     // Add a new OEM SEL entry
     ifaceAddSel->register_method(
         "IpmiSelAddOem",

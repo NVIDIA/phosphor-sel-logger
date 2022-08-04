@@ -220,17 +220,23 @@ inline static void sendWatchdogEventLog(
     if (!wdt_nolog)
     {
         // Construct a human-readable message of this event for the log
-        std::string journalMsg(
+	std::string journalMsg(
             std::string(currentTimerUse) + std::string(direction) +
             "watchdog countdown " + std::to_string(watchdogInterval / 1000) +
             " seconds " + std::string(*expireAction) + " action");
 
         std::string redfishMessageID = "OpenBMC.0.1.IPMIWatchdog";
-
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+        std::string redfishMessage = "WatchDog";
+        selAddSystemRecord(redfishMessageID, redfishMessage,
+                           std::string(msg.get_path()), eventData, assert,
+                           selBMCGenID);
+#else
         selAddSystemRecord(journalMsg, std::string(msg.get_path()), eventData,
                            assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
                            redfishMessageID.c_str(), "REDFISH_MESSAGE_ARGS=%s",
                            eventMessageArgs.c_str(), NULL);
+#endif
     }
 }
 

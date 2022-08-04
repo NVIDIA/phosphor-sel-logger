@@ -239,11 +239,18 @@ void generateEvent(std::string signalName,
                            ". Reading=" + std::to_string(assertValue) +
                            " Threshold=" + std::to_string(thresholdVal) + ".");
 
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+    std::string redfishMessage = sensorName.data();
+    selAddSystemRecord(redfishMessageID, redfishMessage,
+                       std::string(msg.get_path()), eventData, assert,
+                       selBMCGenID);
+#else
     selAddSystemRecord(journalMsg, std::string(msg.get_path()), eventData,
                        assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
                        redfishMessageID.c_str(),
                        "REDFISH_MESSAGE_ARGS=%.*s,%f,%f", sensorName.length(),
                        sensorName.data(), assertValue, thresholdVal);
+#endif
 }
 
 inline static void startThresholdAlarmMonitor(

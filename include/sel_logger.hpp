@@ -42,9 +42,28 @@ static constexpr int maxSELEntries = 3000;
 
 static const std::filesystem::path selLogDir = "/var";
 static const std::string selLogFilename = "ipmi_sel";
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+#include "xyz/openbmc_project/Logging/Entry/server.hpp"
 
+#include <xyz/openbmc_project/Logging/SEL/error.hpp>
+using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
+
+static void selAddSystemRecord(const std::string& messageID,
+                               const std::string& message,
+                               const std::string& path,
+                               const std::vector<uint8_t>& selData,
+                               const bool& assert, const uint16_t& genId);
+
+std::string getService(const std::string& path, const std::string& interface);
+constexpr auto mapperBus = "xyz.openbmc_project.ObjectMapper";
+constexpr auto mapperPath = "/xyz/openbmc_project/object_mapper";
+constexpr auto mapperInterface = "xyz.openbmc_project.ObjectMapper";
+static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
+static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
+#else
 template <typename... T>
 static uint16_t
     selAddSystemRecord(const std::string& message, const std::string& path,
                        const std::vector<uint8_t>& selData, const bool& assert,
                        const uint16_t& genId, T&&... metadata);
+#endif
