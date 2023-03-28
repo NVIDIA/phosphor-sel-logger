@@ -24,6 +24,7 @@
 #include <sdbusplus/asio/object_server.hpp>
 #include <sel_logger.hpp>
 #include <threshold_event_monitor.hpp>
+#include <cable_event_monitor.hpp>
 #include <watchdog_event_monitor.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
@@ -547,6 +548,11 @@ int main(int, char*[])
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_EVENTS
     sdbusplus::bus::match::match thresholdAssertMonitor =
         startThresholdAssertMonitor(conn);
+#endif  
+
+#ifdef SEL_LOGGER_MONITOR_CABLE_EVENTS
+    sdbusplus::bus::match::match cableAssertMonitor =
+        startCableAssertMonitor(conn);
 #endif
 
 #ifdef REDFISH_LOG_MONITOR_PULSE_EVENTS

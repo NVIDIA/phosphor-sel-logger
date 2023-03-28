@@ -19,6 +19,9 @@ deps = [
 if get_option('log-threshold')
   cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_EVENTS'
 endif
+if get_option('log-cable')
+  cpp_args += '-DSEL_LOGGER_MONITOR_CABLE_EVENTS'
+endif
 if get_option('log-pulse')
   cpp_args += '-DREDFISH_LOG_MONITOR_PULSE_EVENTS'
 endif

@@ -37,6 +37,7 @@ static constexpr uint16_t selInvalidRecID =
 static constexpr size_t selEvtDataMaxSize = 3;
 static constexpr size_t selOemDataMaxSize = 13;
 static constexpr uint8_t selEvtDataUnspecified = 0xFF;
+static constexpr uint8_t selEvtDataUnspecifiedDiscrete = 0x0F;
 // Max 3K SEL entries
 static constexpr int maxSELEntries = 3000;
 

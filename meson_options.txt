@@ -1,5 +1,7 @@
 option('log-threshold', type: 'boolean',
        description: 'Automatically log SEL records for threshold sensor events')
+option('log-cable', type: 'boolean',
+       description: 'Automatically log SEL records for cable sensor events')
 option('log-pulse', type: 'boolean',
        description: 'Automatically log events to Redfish for pulse type assert-deassert sensor events')
 option('log-watchdog', type: 'boolean',
