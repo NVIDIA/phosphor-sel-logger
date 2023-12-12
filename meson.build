@@ -2,11 +2,11 @@ project(
   'phosphor-sel-logger',
   'cpp',
   version: '0.1',
-  meson_version: '>=0.57.0',
+  meson_version: '>=1.1.1',
   default_options: [
     'werror=true',
     'warning_level=3',
-    'cpp_std=c++20',
+    'cpp_std=c++23',
   ])
 
 cpp_args = []
@@ -31,13 +31,13 @@ endif
 if get_option('log-alarm')
   cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS'
 endif
+if get_option('log-host')
+  cpp_args += '-DSEL_LOGGER_MONITOR_HOST_ERROR_EVENTS'
+endif
 if get_option('send-to-logger')
   cpp_args += '-DSEL_LOGGER_SEND_TO_LOGGING_SERVICE'
 
   deps += dependency('phosphor-logging')
-endif
-if get_option('clears-sel')
-  cpp_args += '-DSEL_LOGGER_CLEARS_SEL'
 endif
 
 executable(
@@ -54,5 +54,5 @@ systemd = dependency('systemd')
 if systemd.found()
   install_data(
     'service_files/xyz.openbmc_project.Logging.IPMI.service',
-    install_dir: systemd.get_variable(pkgconfig: 'systemdsystemunitdir'))
+    install_dir: systemd.get_variable('systemdsystemunitdir'))
 endif

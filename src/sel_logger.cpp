@@ -16,7 +16,7 @@
 #include <systemd/sd-journal.h>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
@@ -31,6 +31,9 @@
 #include <phosphor-logging/log.hpp>
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS
 #include <threshold_alarm_event_monitor.hpp>
+#endif
+#ifdef SEL_LOGGER_MONITOR_HOST_ERROR_EVENTS
+#include <host_error_event_monitor.hpp>
 #endif
 
 #include <filesystem>
@@ -207,11 +210,30 @@ static unsigned int initializeRecordId(void)
     return id;
 }
 
-#ifdef SEL_LOGGER_CLEARS_SEL
 static unsigned int recordId = initializeRecordId();
+
+static void saveClearSelTimestamp()
+{
+    int fd = open("/var/lib/ipmi/sel_erase_time",
+                  O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0)
+    {
+        std::cerr << "Failed to open file\n";
+        return;
+    }
+
+    if (futimens(fd, NULL) < 0)
+    {
+        std::cerr << "Failed to update SEL cleared timestamp: "
+                  << std::string(strerror(errno));
+    }
+    close(fd);
+}
 
 void clearSelLogFiles()
 {
+    saveClearSelTimestamp();
+
     // Clear the SEL by deleting the log files
     std::vector<std::filesystem::path> selLogFiles;
     if (getSELLogFiles(selLogFiles))
@@ -226,22 +248,21 @@ void clearSelLogFiles()
     recordId = selInvalidRecID;
 
     // Reload rsyslog so it knows to start new log files
-    boost::asio::io_service io;
+    boost::asio::io_context io;
     auto dbus = std::make_shared<sdbusplus::asio::connection>(io);
-    sdbusplus::message::message rsyslogReload = dbus->new_method_call(
+    sdbusplus::message_t rsyslogReload = dbus->new_method_call(
         "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
         "org.freedesktop.systemd1.Manager", "ReloadUnit");
     rsyslogReload.append("rsyslog.service", "replace");
     try
     {
-        sdbusplus::message::message reloadResponse = dbus->call(rsyslogReload);
+        sdbusplus::message_t reloadResponse = dbus->call(rsyslogReload);
     }
     catch (const sdbusplus::exception_t& e)
     {
         std::cerr << e.what() << "\n";
     }
 }
-#endif
 
 static unsigned int getNewRecordId(void)
 {
@@ -397,11 +418,11 @@ static void selAddSystemRecord(const std::string& messageID,
                                const bool& assert, const uint16_t& genId)
 #else
 template <typename... T>
-static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
-                                   const std::string& path,
-                                   const std::vector<uint8_t>& selData,
-                                   const bool& assert, const uint16_t& genId,
-                                   [[maybe_unused]] T&&... metadata)
+static void selAddSystemRecord(
+    [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
+    [[maybe_unused]] const std::string& message, const std::string& path,
+    const std::vector<uint8_t>& selData, const bool& assert,
+    const uint16_t& genId, [[maybe_unused]] T&&... metadata)
 #endif
 {
     // Only 3 bytes of SEL event data are allowed in a system record
@@ -439,6 +460,21 @@ static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
         std::cerr << "Failed to create D-Bus log entry for SEL, ERROR="
                   << e.what() << "\n";
     }
+    std::string journalMsg(message + " from " + path + ": " +
+                           " RecordType=" + std::to_string(selSystemType) +
+                           ", GeneratorID=" + std::to_string(genId) +
+                           ", EventDir=" + std::to_string(assert) +
+                           ", EventData=" + selDataStr);
+
+    // AddToLog.append(journalMsg,
+    //                 "xyz.openbmc_project.Logging.Entry.Level.Informational",
+    //                 std::map<std::string, std::string>(
+    //                     {{"SENSOR_PATH", path},
+    //                      {"GENERATOR_ID", std::to_string(genId)},
+    //                      {"RECORD_TYPE", std::to_string(selSystemType)},
+    //                      {"EVENT_DIR", std::to_string(assert)},
+    //                      {"SENSOR_DATA", selDataStr}}));
+    // conn->call(AddToLog);
     return;
 #else
     unsigned int recordId = getNewRecordId();
@@ -469,9 +505,10 @@ static uint16_t selAddSystemRecord([[maybe_unused]] const std::string& message,
 #endif
 }
 
-static uint16_t selAddOemRecord([[maybe_unused]] const std::string& message,
-                                const std::vector<uint8_t>& selData,
-                                const uint8_t& recordType)
+static void selAddOemRecord(
+    [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
+    [[maybe_unused]] const std::string& message,
+    const std::vector<uint8_t>& selData, const uint8_t& recordType)
 {
     // A maximum of 13 bytes of SEL event data are allowed in an OEM record
     if (selData.size() > selOemDataMaxSize)
@@ -482,26 +519,37 @@ static uint16_t selAddOemRecord([[maybe_unused]] const std::string& message,
     toHexStr(selData, selDataStr);
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-    using namespace xyz::openbmc_project::Logging::SEL;
-    auto entryID = report<SELCreated>(
-        Created::RECORD_TYPE(recordType), Created::GENERATOR_ID(0),
-        Created::SENSOR_DATA(selDataStr.c_str()), Created::EVENT_DIR(0),
-        Created::SENSOR_PATH(""));
-    return static_cast<uint16_t>(entryID);
+    sdbusplus::message_t AddToLog = conn->new_method_call(
+        "xyz.openbmc_project.Logging", "/xyz/openbmc_project/logging",
+        "xyz.openbmc_project.Logging.Create", "Create");
+
+    std::string journalMsg(
+        message + ": " + " RecordType=" + std::to_string(recordType) +
+        ", GeneratorID=" + std::to_string(0) +
+        ", EventDir=" + std::to_string(0) + ", EventData=" + selDataStr);
+
+    AddToLog.append(journalMsg,
+                    "xyz.openbmc_project.Logging.Entry.Level.Informational",
+                    std::map<std::string, std::string>(
+                        {{"SENSOR_PATH", ""},
+                         {"GENERATOR_ID", std::to_string(0)},
+                         {"RECORD_TYPE", std::to_string(recordType)},
+                         {"EVENT_DIR", std::to_string(0)},
+                         {"SENSOR_DATA", selDataStr}}));
+    conn->call(AddToLog);
 #else
     unsigned int recordId = getNewRecordId();
     sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
                     "MESSAGE_ID=%s", selMessageId, "IPMI_SEL_RECORD_ID=%d",
                     recordId, "IPMI_SEL_RECORD_TYPE=%x", recordType,
                     "IPMI_SEL_DATA=%s", selDataStr.c_str(), NULL);
-    return recordId;
 #endif
 }
 
 int main(int, char*[])
 {
     // setup connection to dbus
-    boost::asio::io_service io;
+    boost::asio::io_context io;
     auto conn = std::make_shared<sdbusplus::asio::connection>(io);
 
     // IPMI SEL Object
@@ -523,30 +571,29 @@ int main(int, char*[])
 #else
     // Add a new SEL entry
     ifaceAddSel->register_method(
-        "IpmiSelAdd", [](const std::string& message, const std::string& path,
-                         const std::vector<uint8_t>& selData,
-                         const bool& assert, const uint16_t& genId) {
-            return selAddSystemRecord(message, path, selData, assert, genId);
-        });
+        "IpmiSelAdd",
+        [conn](const std::string& message, const std::string& path,
+               const std::vector<uint8_t>& selData, const bool& assert,
+               const uint16_t& genId) {
+        return selAddSystemRecord(conn, message, path, selData, assert, genId);
+    });
 #endif
     // Add a new OEM SEL entry
-    ifaceAddSel->register_method(
-        "IpmiSelAddOem",
-        [](const std::string& message, const std::vector<uint8_t>& selData,
-           const uint8_t& recordType) {
-            return selAddOemRecord(message, selData, recordType);
-        });
+    ifaceAddSel->register_method("IpmiSelAddOem",
+                                 [conn](const std::string& message,
+                                        const std::vector<uint8_t>& selData,
+                                        const uint8_t& recordType) {
+        return selAddOemRecord(conn, message, selData, recordType);
+    });
 
-#ifdef SEL_LOGGER_CLEARS_SEL
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
     // Clear SEL entries
     ifaceAddSel->register_method("Clear", []() { clearSelLogFiles(); });
 #endif
-#endif
     ifaceAddSel->initialize();
 
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_EVENTS
-    sdbusplus::bus::match::match thresholdAssertMonitor =
+    sdbusplus::bus::match_t thresholdAssertMonitor =
         startThresholdAssertMonitor(conn);
 #endif  
 
@@ -556,17 +603,20 @@ int main(int, char*[])
 #endif
 
 #ifdef REDFISH_LOG_MONITOR_PULSE_EVENTS
-    sdbusplus::bus::match::match pulseEventMonitor =
-        startPulseEventMonitor(conn);
+    sdbusplus::bus::match_t pulseEventMonitor = startPulseEventMonitor(conn);
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_WATCHDOG_EVENTS
-    sdbusplus::bus::match::match watchdogEventMonitor =
+    sdbusplus::bus::match_t watchdogEventMonitor =
         startWatchdogEventMonitor(conn);
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS
     startThresholdAlarmMonitor(conn);
+#endif
+
+#ifdef SEL_LOGGER_MONITOR_HOST_ERROR_EVENTS
+    startHostErrorEventMonitor(conn);
 #endif
     io.run();
 

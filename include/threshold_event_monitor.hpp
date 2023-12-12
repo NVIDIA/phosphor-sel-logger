@@ -34,11 +34,10 @@ static constexpr const uint8_t thresholdEventDataTriggerReadingByte3 = (1 << 4);
 
 static const std::string openBMCMessageRegistryVersion("0.1");
 
-inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
+inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
     std::shared_ptr<sdbusplus::asio::connection> conn)
 {
-    auto thresholdAssertMatcherCallback = [conn](sdbusplus::message::message&
-                                                     msg) {
+    auto thresholdAssertMatcherCallback = [conn](sdbusplus::message_t& msg) {
         // This static set of std::pair<path, event> tracks asserted events to
         // avoid duplicate logs or deasserts logged without an assert
         static boost::container::flat_set<std::pair<std::string, std::string>>
@@ -114,7 +113,7 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
                         thresholdEventDataTriggerReadingByte3;
 
         // Get the sensor reading to put in the event data
-        sdbusplus::message::message getSensorValue =
+        sdbusplus::message_t getSensorValue =
             conn->new_method_call(msg.get_sender(), msg.get_path(),
                                   "org.freedesktop.DBus.Properties", "GetAll");
         getSensorValue.append("xyz.openbmc_project.Sensor.Value");
@@ -122,7 +121,7 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
             sensorValue;
         try
         {
-            sdbusplus::message::message getSensorValueResp =
+            sdbusplus::message_t getSensorValueResp =
                 conn->call(getSensorValue);
             getSensorValueResp.read(sensorValue);
         }
@@ -164,15 +163,14 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
         {
             event.erase(pos, alarm.length());
         }
-        sdbusplus::message::message getThreshold =
+        sdbusplus::message_t getThreshold =
             conn->new_method_call(msg.get_sender(), msg.get_path(),
                                   "org.freedesktop.DBus.Properties", "Get");
         getThreshold.append(thresholdInterface, event);
         std::variant<double, int64_t> thresholdValue;
         try
         {
-            sdbusplus::message::message getThresholdResp =
-                conn->call(getThreshold);
+            sdbusplus::message_t getThresholdResp = conn->call(getThreshold);
             getThresholdResp.read(thresholdValue);
         }
         catch (const sdbusplus::exception_t&)
@@ -181,15 +179,15 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
                       << msg.get_path() << "\n";
             return;
         }
-        double thresholdVal =
-            std::visit(ipmi::VariantToDoubleVisitor(), thresholdValue);
+        double thresholdVal = std::visit(ipmi::VariantToDoubleVisitor(),
+                                         thresholdValue);
 
         double scale = 0;
         auto findScale = sensorValue.find("Scale");
         if (findScale != sensorValue.end())
         {
-            scale =
-                std::visit(ipmi::VariantToDoubleVisitor(), findScale->second);
+            scale = std::visit(ipmi::VariantToDoubleVisitor(),
+                               findScale->second);
             thresholdVal *= std::pow(10, scale);
         }
         try
@@ -204,18 +202,28 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
 
         std::string threshold;
         std::string direction;
-        std::string redfishMessageID =
-            "OpenBMC." + openBMCMessageRegistryVersion;
+        std::string redfishMessageID = "OpenBMC." +
+                                       openBMCMessageRegistryVersion;
+        enum EventType
+        {
+            eventNone,
+            eventInfo,
+            eventWarn,
+            eventErr
+        };
+        [[maybe_unused]] EventType eventType = eventNone;
         if (event == "CriticalLow")
         {
             threshold = "critical low";
             if (assert)
             {
+                eventType = eventErr;
                 direction = "low";
                 redfishMessageID += ".SensorThresholdCriticalLowGoingLow";
             }
             else
             {
+                eventType = eventInfo;
                 direction = "high";
                 redfishMessageID += ".SensorThresholdCriticalLowGoingHigh";
             }
@@ -225,11 +233,13 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
             threshold = "warning low";
             if (assert)
             {
+                eventType = eventWarn;
                 direction = "low";
                 redfishMessageID += ".SensorThresholdWarningLowGoingLow";
             }
             else
             {
+                eventType = eventInfo;
                 direction = "high";
                 redfishMessageID += ".SensorThresholdWarningLowGoingHigh";
             }
@@ -239,11 +249,13 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
             threshold = "warning high";
             if (assert)
             {
+                eventType = eventWarn;
                 direction = "high";
                 redfishMessageID += ".SensorThresholdWarningHighGoingHigh";
             }
             else
             {
+                eventType = eventInfo;
                 direction = "low";
                 redfishMessageID += ".SensorThresholdWarningHighGoingLow";
             }
@@ -253,38 +265,85 @@ inline static sdbusplus::bus::match::match startThresholdAssertMonitor(
             threshold = "critical high";
             if (assert)
             {
+                eventType = eventErr;
                 direction = "high";
                 redfishMessageID += ".SensorThresholdCriticalHighGoingHigh";
             }
             else
             {
+                eventType = eventInfo;
                 direction = "low";
                 redfishMessageID += ".SensorThresholdCriticalHighGoingLow";
             }
         }
-	
-	std::string journalMsg(std::string(sensorName) + " sensor crossed a " +
-                               threshold + " threshold going " + direction +
-                               ". Reading=" + std::to_string(assertValue) +
-                               " Threshold=" + std::to_string(thresholdVal) +
-                               ".");
+        // Downstream code
+        // std::string journalMsg(std::string(sensorName) + " sensor crossed a " +
+        //                            threshold + " threshold going " + direction +
+        //                            ". Reading=" + std::to_string(assertValue) +
+        //                            " Threshold=" + std::to_string(thresholdVal) +
+        //                            ".");
+
+        std::string journalMsg(
+            std::string(sensorName) + " " + threshold + " threshold " +
+            (assert ? "assert" : "deassert") +
+            ". Reading=" + std::to_string(assertValue) +
+            " Threshold=" + std::to_string(thresholdVal) + ".");
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-	std::string redfishMessage = sensorName.data();
-    redfishMessage = redfishMessage + "," + std::to_string(assertValue) + "," + std::to_string(thresholdVal);
+        std::string LogLevel = "";
+        switch (eventType)
+        {
+            case eventInfo:
+            {
+                LogLevel =
+                    "xyz.openbmc_project.Logging.Entry.Level.Informational";
+                break;
+            }
+            case eventWarn:
+            {
+                LogLevel = "xyz.openbmc_project.Logging.Entry.Level.Warning";
+                break;
+            }
+            case eventErr:
+            {
+                LogLevel = "xyz.openbmc_project.Logging.Entry.Level.Critical";
+                break;
+            }
+            default:
+            {
+                LogLevel = "xyz.openbmc_project.Logging.Entry.Level.Debug";
+                break;
+            }
+        }
+        if (eventType != eventNone)
+        {
+            sdbusplus::message_t AddToLog = conn->new_method_call(
+                "xyz.openbmc_project.Logging", "/xyz/openbmc_project/logging",
+                "xyz.openbmc_project.Logging.Create", "Create");
+            AddToLog.append(journalMsg, LogLevel,
+                            std::map<std::string, std::string>(
+                                {{"SENSOR_PATH", std::string(msg.get_path())},
+                                 {"EVENT", threshold},
+                                 {"DIRECTION", direction},
+                                 {"THRESHOLD", std::to_string(thresholdVal)},
+                                 {"READING", std::to_string(assertValue)}}));
+            conn->call(AddToLog);
+        }
+        std::string redfishMessage = sensorName.data();
+        redfishMessage = redfishMessage + "," + std::to_string(assertValue) + "," + std::to_string(thresholdVal);
         selAddSystemRecord(redfishMessageID, redfishMessage,
                            std::string(msg.get_path()), eventData, assert,
                            selBMCGenID);
 #else
         selAddSystemRecord(
-            journalMsg, std::string(msg.get_path()), eventData, assert,
+            conn, journalMsg, std::string(msg.get_path()), eventData, assert,
             selBMCGenID, "REDFISH_MESSAGE_ID=%s", redfishMessageID.c_str(),
             "REDFISH_MESSAGE_ARGS=%.*s,%f,%f", sensorName.length(),
             sensorName.data(), assertValue, thresholdVal);
 #endif
     };
-    sdbusplus::bus::match::match thresholdAssertMatcher(
-        static_cast<sdbusplus::bus::bus&>(*conn),
+    sdbusplus::bus::match_t thresholdAssertMatcher(
+        static_cast<sdbusplus::bus_t&>(*conn),
         "type='signal', member='ThresholdAsserted'",
         std::move(thresholdAssertMatcherCallback));
     return thresholdAssertMatcher;
