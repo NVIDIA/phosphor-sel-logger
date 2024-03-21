@@ -411,6 +411,21 @@ std::string getService(sdbusplus::bus::bus& bus, const std::string& path,
 }
 #endif
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+inline ErrLvl convertDbusSeverity(const std::string& msgId)
+{
+    if (msgId.find("ThresholdWarning") != std::string::npos)
+    {
+        return ErrLvl::Warning;
+
+    }
+    else if (msgId.find("ThresholdCritical") != std::string::npos)
+    {
+        return ErrLvl::Critical;
+    }
+
+    return ErrLvl::Informational;
+}
+
 static void selAddSystemRecord(const std::string& messageID,
                                const std::string& message,
                                const std::string& path,
@@ -435,7 +450,6 @@ static void selAddSystemRecord(
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 
-    auto sevLvl = ErrLvl::Informational;
     static auto bus = sdbusplus::bus::new_default();
     std::map<std::string, std::string> addData;
     addData["namespace"] = "SEL";
@@ -447,6 +461,8 @@ static void selAddSystemRecord(
     addData["GENERATOR_ID"] = std::to_string(genId);
     addData["RECORD_TYPE"] = std::to_string(selSystemType);
 
+
+    auto sevLvl = convertDbusSeverity(messageID);
     try
     {
         auto service = getService(bus, logObjPath, logInterface);
