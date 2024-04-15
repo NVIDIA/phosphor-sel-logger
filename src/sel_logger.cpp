@@ -433,7 +433,7 @@ static void selAddSystemRecord(const std::string& messageID,
                                const bool& assert, const uint16_t& genId)
 #else
 template <typename... T>
-static void selAddSystemRecord(
+static uint16_t selAddSystemRecord(
     [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
     [[maybe_unused]] const std::string& message, const std::string& path,
     const std::vector<uint8_t>& selData, const bool& assert,
@@ -476,22 +476,6 @@ static void selAddSystemRecord(
         std::cerr << "Failed to create D-Bus log entry for SEL, ERROR="
                   << e.what() << "\n";
     }
-    std::string journalMsg(message + " from " + path + ": " +
-                           " RecordType=" + std::to_string(selSystemType) +
-                           ", GeneratorID=" + std::to_string(genId) +
-                           ", EventDir=" + std::to_string(assert) +
-                           ", EventData=" + selDataStr);
-
-    // AddToLog.append(journalMsg,
-    //                 "xyz.openbmc_project.Logging.Entry.Level.Informational",
-    //                 std::map<std::string, std::string>(
-    //                     {{"SENSOR_PATH", path},
-    //                      {"GENERATOR_ID", std::to_string(genId)},
-    //                      {"RECORD_TYPE", std::to_string(selSystemType)},
-    //                      {"EVENT_DIR", std::to_string(assert)},
-    //                      {"SENSOR_DATA", selDataStr}}));
-    // conn->call(AddToLog);
-    return;
 #else
     unsigned int recordId = getNewRecordId();
     sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
@@ -521,7 +505,7 @@ static void selAddSystemRecord(
 #endif
 }
 
-static void selAddOemRecord(
+static uint16_t selAddOemRecord(
     [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
     [[maybe_unused]] const std::string& message,
     const std::vector<uint8_t>& selData, const uint8_t& recordType)
@@ -553,12 +537,14 @@ static void selAddOemRecord(
                          {"EVENT_DIR", std::to_string(0)},
                          {"SENSOR_DATA", selDataStr}}));
     conn->call(AddToLog);
+    return 0;
 #else
     unsigned int recordId = getNewRecordId();
     sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
                     "MESSAGE_ID=%s", selMessageId, "IPMI_SEL_RECORD_ID=%d",
                     recordId, "IPMI_SEL_RECORD_TYPE=%x", recordType,
                     "IPMI_SEL_DATA=%s", selDataStr.c_str(), NULL);
+    return recordId;
 #endif
 }
 
