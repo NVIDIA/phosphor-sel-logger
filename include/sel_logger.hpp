@@ -43,9 +43,13 @@ static constexpr int maxSELEntries = 3000;
 
 static const std::filesystem::path selLogDir = "/var";
 static const std::string selLogFilename = "ipmi_sel";
+
+#ifdef SEL_LOGGER_ENABLE_SEL_DELETE
+static const std::string nextRecordFilename = "next_records";
+#endif
+
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 #include "xyz/openbmc_project/Logging/Entry/server.hpp"
-
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 

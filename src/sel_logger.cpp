@@ -230,6 +230,217 @@ static void saveClearSelTimestamp()
     close(fd);
 }
 
+#ifdef SEL_LOGGER_ENABLE_SEL_DELETE
+std::vector<uint16_t> nextRecordsCache;
+
+static void backupCacheToFile()
+{
+    std::ofstream nextRecordStream(selLogDir / nextRecordFilename);
+    for (auto recordIds : nextRecordsCache)
+    {
+        nextRecordStream << recordIds << '\n';
+    }
+}
+
+static uint16_t getNewRecordId()
+{
+    uint16_t nextRecordId = nextRecordsCache.back();
+    // Check if SEL is full
+    if (nextRecordId == selInvalidRecID)
+    {
+        return nextRecordId;
+    }
+    nextRecordsCache.pop_back();
+    if (nextRecordsCache.empty())
+    {
+        nextRecordsCache.push_back(nextRecordId + 1);
+    }
+    backupCacheToFile();
+    return nextRecordId;
+}
+
+static void initializeRecordId()
+{
+    std::ifstream nextRecordStream(selLogDir / nextRecordFilename);
+    if (!nextRecordStream.is_open())
+    {
+        std::ofstream newStream(selLogDir / nextRecordFilename);
+        newStream << '1' << '\n';
+        newStream.close();
+        nextRecordStream.open(selLogDir / nextRecordFilename);
+    }
+    std::string line;
+    while (std::getline(nextRecordStream, line))
+    {
+        nextRecordsCache.push_back(std::stoi(line));
+    }
+}
+
+void clearSelLogFiles()
+{
+    saveClearSelTimestamp();
+
+    // Clear the SEL by deleting the log files
+    std::vector<std::filesystem::path> selLogFiles;
+    if (getSELLogFiles(selLogFiles))
+    {
+        for (const std::filesystem::path& file : selLogFiles)
+        {
+            std::error_code ec;
+            std::filesystem::remove(file, ec);
+        }
+    }
+    // Reload rsyslog so it knows to start new log files
+    boost::asio::io_context io;
+    auto dbus = std::make_shared<sdbusplus::asio::connection>(io);
+    sdbusplus::message_t rsyslogReload = dbus->new_method_call(
+        "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager", "ReloadUnit");
+    rsyslogReload.append("rsyslog.service", "replace");
+    try
+    {
+        sdbusplus::message_t reloadResponse = dbus->call(rsyslogReload);
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        std::cerr << e.what() << "\n";
+    }
+    // Set next record to 1
+    nextRecordsCache.clear();
+    nextRecordsCache.push_back(1);
+    // Update backup file as well
+    std::ofstream nextRecordStream(selLogDir / nextRecordFilename);
+    nextRecordStream << '1' << '\n';
+}
+
+static bool selDeleteTargetRecord(const uint16_t& targetId)
+{
+    bool targetEntryFound = false;
+    // Check if the ipmi_sel exist and save the path
+    std::vector<std::filesystem::path> selLogFiles;
+    if (!getSELLogFiles(selLogFiles))
+    {
+        return targetEntryFound;
+    }
+
+    // Go over all the ipmi_sel files to remove the entry with the target ID
+    for (const std::filesystem::path& file : selLogFiles)
+    {
+        std::fstream logStream(file, std::ios::in);
+        std::fstream tempFile(selLogDir / "temp", std::ios::out);
+        if (!logStream.is_open())
+        {
+            return targetEntryFound;
+        }
+        std::string line;
+        while (std::getline(logStream, line))
+        {
+            // Get the recordId of the current entry
+            int left = line.find(" ");
+            int right = line.find(",");
+            int recordLen = right - left;
+            std::string recordId = line.substr(left, recordLen);
+            int newRecordId = std::stoi(recordId);
+
+            if (newRecordId != targetId)
+            {
+                // Copy the entry from the original ipmi_sel to the temp file
+                tempFile << line << '\n';
+            }
+            else
+            {
+                // Skip copying the target entry
+                targetEntryFound = true;
+            }
+        }
+        logStream.close();
+        tempFile.close();
+        if (targetEntryFound)
+        {
+            std::fstream logStream(file, std::ios::out);
+            std::fstream tempFile(selLogDir / "temp", std::ios::in);
+            while (std::getline(tempFile, line))
+            {
+                logStream << line << '\n';
+            }
+            logStream.close();
+            tempFile.close();
+            std::error_code ec;
+            if (!std::filesystem::remove(selLogDir / "temp", ec))
+            {
+                std::cerr << ec.message() << std::endl;
+            }
+            break;
+        }
+    }
+    return targetEntryFound;
+}
+
+static uint16_t selDeleteRecord(const uint16_t& recordId)
+{
+    std::filesystem::file_time_type prevAddTime =
+        std::filesystem::last_write_time(selLogDir / selLogFilename);
+    bool targetEntryFound = selDeleteTargetRecord(recordId);
+
+    // Check if the Record Id was found
+    if (!targetEntryFound)
+    {
+        return selInvalidRecID;
+    }
+    // Add to next record cache for reuse
+    nextRecordsCache.push_back(recordId);
+    // Add to backup file
+    std::ofstream nextRecordStream(selLogDir / nextRecordFilename,
+                                   std::ios::app);
+    nextRecordStream << recordId << '\n';
+    // Keep Last Add Time the same
+    std::filesystem::last_write_time(selLogDir / selLogFilename, prevAddTime);
+    // Update Last Del Time
+    saveClearSelTimestamp();
+    return recordId;
+}
+#else
+static unsigned int initializeRecordId()
+{
+    std::vector<std::filesystem::path> selLogFiles;
+    if (!getSELLogFiles(selLogFiles))
+    {
+        return 0;
+    }
+    std::ifstream logStream(selLogFiles.front());
+    if (!logStream.is_open())
+    {
+        return 0;
+    }
+    std::string line;
+    std::string newestEntry;
+    while (std::getline(logStream, line))
+    {
+        newestEntry = line;
+    }
+
+    std::vector<std::string> newestEntryFields;
+    boost::split(newestEntryFields, newestEntry, boost::is_any_of(" ,"),
+                 boost::token_compress_on);
+    if (newestEntryFields.size() < 4)
+    {
+        return 0;
+    }
+
+    return std::stoul(newestEntryFields[1]);
+}
+
+static unsigned int recordId = initializeRecordId();
+
+static unsigned int getNewRecordId()
+{
+    if (++recordId >= selInvalidRecID)
+    {
+        recordId = selInvalidRecID;
+    }
+    return recordId;
+}
+
 void clearSelLogFiles()
 {
     saveClearSelTimestamp();
@@ -245,7 +456,7 @@ void clearSelLogFiles()
         }
     }
 
-    recordId = selInvalidRecID;
+    recordId = 0;
 
     // Reload rsyslog so it knows to start new log files
     boost::asio::io_context io;
@@ -478,12 +689,14 @@ static uint16_t selAddSystemRecord(
     }
 #else
     unsigned int recordId = getNewRecordId();
-    sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
-                    "MESSAGE_ID=%s", selMessageId, "IPMI_SEL_RECORD_ID=%d",
-                    recordId, "IPMI_SEL_RECORD_TYPE=%x", selSystemType,
-                    "IPMI_SEL_GENERATOR_ID=%x", genId,
-                    "IPMI_SEL_SENSOR_PATH=%s", path.c_str(),
-                    "IPMI_SEL_EVENT_DIR=%x", assert, "IPMI_SEL_DATA=%s",
+    if (recordId < selInvalidRecID)
+    {
+        sd_journal_send(
+            "MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
+            "MESSAGE_ID=%s", selMessageId, "IPMI_SEL_RECORD_ID=%d", recordId,
+            "IPMI_SEL_RECORD_TYPE=%x", selSystemType,
+            "IPMI_SEL_GENERATOR_ID=%x", genId, "IPMI_SEL_SENSOR_PATH=%s",
+            path.c_str(), "IPMI_SEL_EVENT_DIR=%x", assert, "IPMI_SEL_DATA=%s",
                     selDataStr.c_str(), std::forward<T>(metadata)..., NULL);
 
     // Write SEL event record to ipmi_sel log file
@@ -540,16 +753,25 @@ static uint16_t selAddOemRecord(
     return 0;
 #else
     unsigned int recordId = getNewRecordId();
-    sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i", selPriority,
-                    "MESSAGE_ID=%s", selMessageId, "IPMI_SEL_RECORD_ID=%d",
-                    recordId, "IPMI_SEL_RECORD_TYPE=%x", recordType,
+    if (recordId < selInvalidRecID)
+    {
+        sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i",
+                        selPriority, "MESSAGE_ID=%s", selMessageId,
+                        "IPMI_SEL_RECORD_ID=%d", recordId,
+                        "IPMI_SEL_RECORD_TYPE=%x", recordType,
                     "IPMI_SEL_DATA=%s", selDataStr.c_str(), NULL);
+    }
     return recordId;
 #endif
 }
 
 int main(int, char*[])
 {
+#ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+#ifdef SEL_LOGGER_ENABLE_SEL_DELETE
+    initializeRecordId();
+#endif
+#endif
     // setup connection to dbus
     boost::asio::io_context io;
     auto conn = std::make_shared<sdbusplus::asio::connection>(io);
@@ -591,6 +813,12 @@ int main(int, char*[])
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
     // Clear SEL entries
     ifaceAddSel->register_method("Clear", []() { clearSelLogFiles(); });
+#ifdef SEL_LOGGER_ENABLE_SEL_DELETE
+    // Delete a SEL entry
+    ifaceAddSel->register_method("IpmiSelDelete", [](const uint16_t& recordId) {
+        return selDeleteRecord(recordId);
+    });
+#endif
 #endif
     ifaceAddSel->initialize();
 
