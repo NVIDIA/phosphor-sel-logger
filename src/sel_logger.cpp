@@ -413,12 +413,14 @@ std::string getService(sdbusplus::bus::bus& bus, const std::string& path,
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 inline ErrLvl convertDbusSeverity(const std::string& msgId)
 {
-    if (msgId.find("ThresholdWarning") != std::string::npos)
+    if ((msgId.find("ThresholdWarningLowGoingLow") != std::string::npos) ||
+        (msgId.find("ThresholdWarningHighGoingHigh") != std::string::npos))
     {
         return ErrLvl::Warning;
 
     }
-    else if (msgId.find("ThresholdCritical") != std::string::npos)
+    else if ((msgId.find("ThresholdCriticalLowGoingLow") != std::string::npos) ||
+             (msgId.find("ThresholdCriticalHighGoingHigh") != std::string::npos))
     {
         return ErrLvl::Critical;
     }
