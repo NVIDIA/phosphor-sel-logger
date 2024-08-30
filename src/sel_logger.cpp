@@ -22,6 +22,7 @@
 #include <boost/format.hpp>
 #include <pulse_event_monitor.hpp>
 #include <sdbusplus/asio/object_server.hpp>
+#include <dbus-sdr/sdrutils.hpp>
 #include <sel_logger.hpp>
 #include <threshold_event_monitor.hpp>
 #include <cable_event_monitor.hpp>
@@ -675,6 +676,29 @@ static uint16_t selAddSystemRecord(
     addData["GENERATOR_ID"] = std::to_string(genId);
     addData["RECORD_TYPE"] = std::to_string(selSystemType);
 
+    try
+    {
+        auto sensorType = getSensorTypeStringPath(path);
+        if (!sensorType.empty())
+        {
+            addData["SENSOR_TYPE"] = sensorType;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to get sensor type for SEL, ERROR="
+                  << e.what() << "\n";
+    }
+    try
+    {
+        auto sensorNumber = getSensorNumberFromPath(path);
+        addData["SENSOR_NUMBER"] = std::to_string(sensorNumber);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to get sensor number for SEL, ERROR="
+                  << e.what() << "\n";
+    }
 
     auto sevLvl = convertDbusSeverity(messageID);
     try

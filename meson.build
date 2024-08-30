@@ -15,6 +15,7 @@ deps = [
   dependency('sdbusplus'),
   dependency('systemd'),
   dependency('boost'),
+  dependency('libdbussdr'),
 ]
 
 if get_option('log-threshold')
