@@ -20,16 +20,16 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
-#include <cable_event_monitor.hpp>
+#include <pulse_event_monitor.hpp>
+#include <sdbusplus/asio/object_server.hpp>
 #include <dbus-sdr/sdrutils.hpp>
+#include <sel_logger.hpp>
+#include <threshold_event_monitor.hpp>
+#include <cable_event_monitor.hpp>
+#include <watchdog_event_monitor.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/log.hpp>
-#include <pulse_event_monitor.hpp>
-#include <sdbusplus/asio/object_server.hpp>
-#include <sel_logger.hpp>
-#include <threshold_event_monitor.hpp>
-#include <watchdog_event_monitor.hpp>
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS
 #include <threshold_alarm_event_monitor.hpp>
 #endif
