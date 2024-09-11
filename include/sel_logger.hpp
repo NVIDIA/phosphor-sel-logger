@@ -41,8 +41,9 @@ static constexpr size_t selOemDataMaxSize = 13;
 static constexpr uint8_t selEvtDataUnspecified = 0xFF;
 static constexpr uint8_t selEvtDataUnspecifiedDiscrete = 0x0F;
 // Max 3K SEL entries
-static constexpr int maxSELEntries = 3000;
-
+#ifdef SEL_CAPACITY
+static constexpr int maxSELEntries = SEL_CAPACITY;
+#endif
 static const std::filesystem::path selLogDir = "/var";
 static const std::string selLogFilename = "ipmi_sel";
 

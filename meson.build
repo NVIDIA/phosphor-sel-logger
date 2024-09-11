@@ -36,6 +36,8 @@ endif
 if get_option('log-host')
   cpp_args += '-DSEL_LOGGER_MONITOR_HOST_ERROR_EVENTS'
 endif
+sel_capacity = get_option('sel-capacity')
+cpp_args += '-DSEL_CAPACITY=' + sel_capacity.to_string()  
 if get_option('send-to-logger')
   cpp_args += '-DSEL_LOGGER_SEND_TO_LOGGING_SERVICE'
 
