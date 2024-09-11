@@ -22,9 +22,11 @@ static constexpr const char* ipmiSelPath = "/xyz/openbmc_project/Logging/IPMI";
 static constexpr const char* ipmiSelAddInterface =
     "xyz.openbmc_project.Logging.IPMI";
 // SEL policy in dbus
-static constexpr char const *selLogObj = "xyz.openbmc_project.Settings";
-static constexpr char const *selLogPath = "/xyz/openbmc_project/logging/settings";
-static constexpr char const *selLogIntf = "xyz.openbmc_project.Logging.Settings";
+static constexpr const char* selLogObj = "xyz.openbmc_project.Settings";
+static constexpr const char* selLogPath =
+    "/xyz/openbmc_project/logging/settings";
+static constexpr const char* selLogIntf =
+    "xyz.openbmc_project.Logging.Settings";
 
 // ID string generated using journalctl to include in the MESSAGE_ID field for
 // SEL entries.  Helps with filtering SEL entries in the journal.
@@ -50,6 +52,7 @@ static const std::string nextRecordFilename = "next_records";
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
 #include "xyz/openbmc_project/Logging/Entry/server.hpp"
+
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 

@@ -20,16 +20,16 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
-#include <pulse_event_monitor.hpp>
-#include <sdbusplus/asio/object_server.hpp>
-#include <dbus-sdr/sdrutils.hpp>
-#include <sel_logger.hpp>
-#include <threshold_event_monitor.hpp>
 #include <cable_event_monitor.hpp>
-#include <watchdog_event_monitor.hpp>
+#include <dbus-sdr/sdrutils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/log.hpp>
+#include <pulse_event_monitor.hpp>
+#include <sdbusplus/asio/object_server.hpp>
+#include <sel_logger.hpp>
+#include <threshold_event_monitor.hpp>
+#include <watchdog_event_monitor.hpp>
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS
 #include <threshold_alarm_event_monitor.hpp>
 #endif
@@ -106,8 +106,8 @@ static bool isLinearSELPolicy()
     try
     {
         // IPMI SEL Policy Object
-        auto method = bus.new_method_call(selLogObj, selLogPath,
-                        "org.freedesktop.DBus.Properties", "Get");
+        auto method = bus.new_method_call(
+            selLogObj, selLogPath, "org.freedesktop.DBus.Properties", "Get");
         method.append(selLogIntf, "SelPolicy");
         auto reply = bus.call(method);
         if (reply.is_method_error())
@@ -142,18 +142,20 @@ static bool isLinearSELPolicy()
 }
 
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-static std::string getSELEventStr(const unsigned int& recordId, const std::string& selDataStr,
-                                  const uint16_t& genId, const std::string& path, const bool& assert)
+static std::string getSELEventStr(const unsigned int& recordId,
+                                  const std::string& selDataStr,
+                                  const uint16_t& genId,
+                                  const std::string& path, const bool& assert)
 {
     // The format of the ipmi_sel message is:
     // "<Timestamp> <ID>,<Type>,<EventData>,[<Generator ID>,<Path>,<Direction>]"
 
     // Get the timestamp
     time_t t;
-    struct tm *tmp;
+    struct tm* tmp;
     char timestamp[30];
-    time( &t );
-    tmp = localtime( &t );
+    time(&t);
+    tmp = localtime(&t);
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", tmp);
 
     // Create SEL event string
@@ -161,9 +163,9 @@ static std::string getSELEventStr(const unsigned int& recordId, const std::strin
     try
     {
         selStr = (boost::format("%s %d,%d,%s,%x,%s,%x") % timestamp % recordId %
-            static_cast<size_t>(selSystemType) % selDataStr.c_str() % genId %
-            path.c_str() % assert)
-            .str();
+                  static_cast<size_t>(selSystemType) % selDataStr.c_str() %
+                  genId % path.c_str() % assert)
+                     .str();
     }
     catch (...)
     {
@@ -532,7 +534,7 @@ static void circularConfEventsRotate(std::filesystem::path selLogFile)
     toStream.open(selLogFileBackup, std::ios_base::app | std::ios_base::out);
     // Skip the first line
     getline(fromStream, line);
-    while( getline(fromStream, line) )
+    while (getline(fromStream, line))
     {
         toStream << line << "\n";
     }
@@ -546,14 +548,14 @@ static void circularConfEventsRotate(std::filesystem::path selLogFile)
     return;
 }
 
-
-static void writeSELEvent(const unsigned int& recordId, const std::string& selDataStr,
-                          const uint16_t& genId, const std::string& path, const bool& assert)
+static void writeSELEvent(const unsigned int& recordId,
+                          const std::string& selDataStr, const uint16_t& genId,
+                          const std::string& path, const bool& assert)
 {
     // Write the event
     // Format the SEL event string
-    std::string selStr = getSELEventStr(recordId, selDataStr, genId,
-                            path, assert);
+    std::string selStr = getSELEventStr(recordId, selDataStr, genId, path,
+                                        assert);
     if (selStr.empty())
     {
         // No write for empty string
@@ -575,14 +577,15 @@ static void writeSELEvent(const unsigned int& recordId, const std::string& selDa
         selLogFile = selLogFiles.front();
     }
     // Write the event to SEL log file
-    std::ofstream logStream(selLogFile, std::ios_base::app | std::ios_base::out);
+    std::ofstream logStream(selLogFile,
+                            std::ios_base::app | std::ios_base::out);
     if (!logStream.is_open())
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
-           "writeSELEvent: Failed to open SEL log file");
+            "writeSELEvent: Failed to open SEL log file");
         return;
     }
-    logStream<<selStr<<'\n';
+    logStream << selStr << '\n';
     logStream.close();
 
     // Check for Max SEL entries for circular config
@@ -630,10 +633,11 @@ inline ErrLvl convertDbusSeverity(const std::string& msgId)
         (msgId.find("ThresholdWarningHighGoingHigh") != std::string::npos))
     {
         return ErrLvl::Warning;
-
     }
-    else if ((msgId.find("ThresholdCriticalLowGoingLow") != std::string::npos) ||
-             (msgId.find("ThresholdCriticalHighGoingHigh") != std::string::npos))
+    else if ((msgId.find("ThresholdCriticalLowGoingLow") !=
+              std::string::npos) ||
+             (msgId.find("ThresholdCriticalHighGoingHigh") !=
+              std::string::npos))
     {
         return ErrLvl::Critical;
     }
@@ -686,8 +690,8 @@ static uint16_t selAddSystemRecord(
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Failed to get sensor type for SEL, ERROR="
-                  << e.what() << "\n";
+        std::cerr << "Failed to get sensor type for SEL, ERROR=" << e.what()
+                  << "\n";
     }
     try
     {
@@ -696,8 +700,8 @@ static uint16_t selAddSystemRecord(
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Failed to get sensor number for SEL, ERROR="
-                  << e.what() << "\n";
+        std::cerr << "Failed to get sensor number for SEL, ERROR=" << e.what()
+                  << "\n";
     }
 
     auto sevLvl = convertDbusSeverity(messageID);
@@ -724,24 +728,24 @@ static uint16_t selAddSystemRecord(
             "IPMI_SEL_RECORD_TYPE=%x", selSystemType,
             "IPMI_SEL_GENERATOR_ID=%x", genId, "IPMI_SEL_SENSOR_PATH=%s",
             path.c_str(), "IPMI_SEL_EVENT_DIR=%x", assert, "IPMI_SEL_DATA=%s",
-                    selDataStr.c_str(), std::forward<T>(metadata)..., NULL);
+            selDataStr.c_str(), std::forward<T>(metadata)..., NULL);
 
-    // Write SEL event record to ipmi_sel log file
-    if (recordId != 0)
-    {
-        writeSELEvent(recordId, selDataStr, genId, path, assert);
-        // Update max sel entry reached once recordId crosses maxSELEntries
-        if (recordId >= maxSELEntries)
+        // Write SEL event record to ipmi_sel log file
+        if (recordId != 0)
         {
-            maxSELEntriesReached = true;
+            writeSELEvent(recordId, selDataStr, genId, path, assert);
+            // Update max sel entry reached once recordId crosses maxSELEntries
+            if (recordId >= maxSELEntries)
+            {
+                maxSELEntriesReached = true;
+            }
+            else
+            {
+                maxSELEntriesReached = false;
+            }
         }
-        else
-        {
-            maxSELEntriesReached = false;
-        }
-    }
 
-    return recordId;
+        return recordId;
 #endif
 }
 
@@ -779,16 +783,16 @@ static uint16_t selAddOemRecord(
     conn->call(AddToLog);
     return 0;
 #else
-    unsigned int recordId = getNewRecordId();
-    if (recordId < selInvalidRecID)
-    {
-        sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i",
-                        selPriority, "MESSAGE_ID=%s", selMessageId,
-                        "IPMI_SEL_RECORD_ID=%d", recordId,
-                        "IPMI_SEL_RECORD_TYPE=%x", recordType,
-                    "IPMI_SEL_DATA=%s", selDataStr.c_str(), NULL);
-    }
-    return recordId;
+        unsigned int recordId = getNewRecordId();
+        if (recordId < selInvalidRecID)
+        {
+            sd_journal_send("MESSAGE=%s", message.c_str(), "PRIORITY=%i",
+                            selPriority, "MESSAGE_ID=%s", selMessageId,
+                            "IPMI_SEL_RECORD_ID=%d", recordId,
+                            "IPMI_SEL_RECORD_TYPE=%x", recordType,
+                            "IPMI_SEL_DATA=%s", selDataStr.c_str(), NULL);
+        }
+        return recordId;
 #endif
 }
 
@@ -816,18 +820,19 @@ int main(int, char*[])
         [](const std::string& messageID, const std::string& message,
            const std::string& path, const std::vector<uint8_t>& selData,
            const bool& assert, const uint16_t& genId) {
-            return selAddSystemRecord(messageID, message, path, selData, assert,
+        return selAddSystemRecord(messageID, message, path, selData, assert,
+                                  genId);
+    });
+#else
+        // Add a new SEL entry
+        ifaceAddSel->register_method(
+            "IpmiSelAdd",
+            [conn](const std::string& message, const std::string& path,
+                   const std::vector<uint8_t>& selData, const bool& assert,
+                   const uint16_t& genId) {
+            return selAddSystemRecord(conn, message, path, selData, assert,
                                       genId);
         });
-#else
-    // Add a new SEL entry
-    ifaceAddSel->register_method(
-        "IpmiSelAdd",
-        [conn](const std::string& message, const std::string& path,
-               const std::vector<uint8_t>& selData, const bool& assert,
-               const uint16_t& genId) {
-        return selAddSystemRecord(conn, message, path, selData, assert, genId);
-    });
 #endif
     // Add a new OEM SEL entry
     ifaceAddSel->register_method("IpmiSelAddOem",
@@ -852,7 +857,7 @@ int main(int, char*[])
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_EVENTS
     sdbusplus::bus::match_t thresholdAssertMonitor =
         startThresholdAssertMonitor(conn);
-#endif  
+#endif
 
 #ifdef SEL_LOGGER_MONITOR_CABLE_EVENTS
     sdbusplus::bus::match::match cableAssertMonitor =

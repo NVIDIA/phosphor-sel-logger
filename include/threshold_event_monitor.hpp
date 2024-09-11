@@ -277,10 +277,13 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             }
         }
         // Downstream code
-        // std::string journalMsg(std::string(sensorName) + " sensor crossed a " +
-        //                            threshold + " threshold going " + direction +
-        //                            ". Reading=" + std::to_string(assertValue) +
-        //                            " Threshold=" + std::to_string(thresholdVal) +
+        // std::string journalMsg(std::string(sensorName) + " sensor crossed a "
+        // +
+        //                            threshold + " threshold going " +
+        //                            direction +
+        //                            ". Reading=" + std::to_string(assertValue)
+        //                            + " Threshold=" +
+        //                            std::to_string(thresholdVal) +
         //                            ".");
 
         std::string journalMsg(
@@ -330,7 +333,8 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             conn->call(AddToLog);
         }
         std::string redfishMessage = sensorName.data();
-        redfishMessage = redfishMessage + "," + std::to_string(assertValue) + "," + std::to_string(thresholdVal);
+        redfishMessage = redfishMessage + "," + std::to_string(assertValue) +
+                         "," + std::to_string(thresholdVal);
         selAddSystemRecord(redfishMessageID, redfishMessage,
                            std::string(msg.get_path()), eventData, assert,
                            selBMCGenID);

@@ -220,7 +220,7 @@ inline static void sendWatchdogEventLog(
     if (!wdt_nolog)
     {
         // Construct a human-readable message of this event for the log
-	std::string journalMsg(
+        std::string journalMsg(
             std::string(currentTimerUse) + std::string(direction) +
             "watchdog countdown " + std::to_string(watchdogInterval / 1000) +
             " seconds " + std::string(*expireAction) + " action");

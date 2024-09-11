@@ -28,8 +28,9 @@ static boost::container::flat_map<std::string, sdbusMatch> hostErrorMatches = {
     {"ThermalTrip", thermTripEventMatcher}, {"IERR", ierrEventMatcher}};
 static boost::container::flat_set<std::string> hostErrorEvents;
 
-void hostErrorEventMonitor([[maybe_unused]]std::shared_ptr<sdbusplus::asio::connection> conn,
-                           sdbusplus::message_t& msg)
+void hostErrorEventMonitor(
+    [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
+    sdbusplus::message_t& msg)
 {
     std::string msgInterface;
     boost::container::flat_map<std::string, std::variant<bool>> values;
