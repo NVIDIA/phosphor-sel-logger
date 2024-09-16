@@ -18,6 +18,8 @@
 #pragma once
 #include <sel_logger.hpp>
 #include <sensorutils.hpp>
+#include <sdbusplus/asio/object_server.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include <string_view>
 #include <variant>
