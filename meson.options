@@ -16,3 +16,5 @@ option('sel-capacity', type : 'integer',
        value : 3000, description : 'Set SEL capacity')
 option('sel-delete', type: 'boolean',
        description: 'Enables ability to delete SEL entries given a record ID')
+option('use-dmtf-registry', type: 'boolean',
+       description: 'Uses the DMTF Sensor Event Registry instead of the OpenBMC Sensor Event Registry')
