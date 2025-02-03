@@ -14,3 +14,5 @@ option('send-to-logger', type: 'boolean',
        description: 'Automatically log events to Redfish for pulse type assert-deassert sensor events')
 option('sel-delete', type: 'boolean',
        description: 'Enables ability to delete SEL entries given a record ID')
+option('use-dmtf-registry', type: 'boolean',
+       description: 'Uses the DMTF Sensor Event Registry instead of the OpenBMC Sensor Event Registry')

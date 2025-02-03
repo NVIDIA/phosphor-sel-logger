@@ -33,6 +33,7 @@ static constexpr const uint8_t thresholdEventDataTriggerReadingByte2 = (1 << 6);
 static constexpr const uint8_t thresholdEventDataTriggerReadingByte3 = (1 << 4);
 
 static const std::string openBMCMessageRegistryVersion("0.1");
+static const std::string dmtfMessageRegistryVersion("1.0");
 
 inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
     std::shared_ptr<sdbusplus::asio::connection> conn)
@@ -202,8 +203,13 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
 
         std::string threshold;
         std::string direction;
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+        std::string redfishMessageID = "SensorEvent." +
+                                       dmtfMessageRegistryVersion;
+#else
         std::string redfishMessageID = "OpenBMC." +
                                        openBMCMessageRegistryVersion;
+#endif
         enum EventType
         {
             eventNone,
@@ -219,13 +225,21 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             {
                 eventType = eventErr;
                 direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingBelowLowerCriticalThreshold";
+#else
                 redfishMessageID += ".SensorThresholdCriticalLowGoingLow";
+#endif
             }
             else
             {
                 eventType = eventInfo;
                 direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingAboveLowerCriticalThreshold";
+#else
                 redfishMessageID += ".SensorThresholdCriticalLowGoingHigh";
+#endif
             }
         }
         else if (event == "WarningLow")
@@ -235,13 +249,23 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             {
                 eventType = eventWarn;
                 direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingBelowLowerCautionThreshold";
+#else
                 redfishMessageID += ".SensorThresholdWarningLowGoingLow";
+#endif
             }
             else
             {
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                // No DMTF SensorEvent message for going above a warning-low
+                // threshold
+                return;
+#else
                 eventType = eventInfo;
                 direction = "high";
                 redfishMessageID += ".SensorThresholdWarningLowGoingHigh";
+#endif
             }
         }
         else if (event == "WarningHigh")
@@ -251,13 +275,23 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             {
                 eventType = eventWarn;
                 direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingAboveUpperCautionThreshold";
+#else
                 redfishMessageID += ".SensorThresholdWarningHighGoingHigh";
+#endif
             }
             else
             {
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                // No DMTF SensorEvent message for going below a warning-high
+                // threshold
+                return;
+#else
                 eventType = eventInfo;
                 direction = "low";
                 redfishMessageID += ".SensorThresholdWarningHighGoingLow";
+#endif
             }
         }
         else if (event == "CriticalHigh")
@@ -267,15 +301,62 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
             {
                 eventType = eventErr;
                 direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingAboveUpperCriticalThreshold";
+#else
                 redfishMessageID += ".SensorThresholdCriticalHighGoingHigh";
+#endif
             }
             else
             {
                 eventType = eventInfo;
                 direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+                redfishMessageID += ".ReadingBelowUpperCriticalThreshold";
+#else
                 redfishMessageID += ".SensorThresholdCriticalHighGoingLow";
+#endif
             }
         }
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+        else if (event == "HardShutdownLow")
+        {
+            threshold = "hard shutdown low";
+            if (assert)
+            {
+                eventType = eventErr;
+                direction = "low";
+                redfishMessageID += ".ReadingBelowLowerFatalThreshold";
+            }
+            else
+            {
+                eventType = eventInfo;
+                direction = "high";
+                redfishMessageID += ".ReadingAboveLowerFatalThreshold";
+            }
+        }
+        else if (event == "HardShutdownHigh")
+        {
+            threshold = "hard shutdown high";
+            if (assert)
+            {
+                eventType = eventErr;
+                direction = "high";
+                redfishMessageID += ".ReadingAboveUpperFatalThreshold";
+            }
+            else
+            {
+                eventType = eventInfo;
+                direction = "low";
+                redfishMessageID += ".ReadingBelowUpperFatalThreshold";
+            }
+        }
+        else
+        {
+            // Other threshold types, such as SoftShutdown, are not supported
+            return;
+        }
+#endif
         // Downstream code
         // std::string journalMsg(std::string(sensorName) + " sensor crossed a "
         // +
@@ -318,6 +399,49 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
                 break;
             }
         }
+
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+        // Get the sensor unit via a dbus call and process it to remove the
+        // "xyz.openbmc_project.Sensor.Value.Unit." prefix
+        std::string unit = "";
+        sdbusplus::message_t getSensorUnit =
+            conn->new_method_call(msg.get_sender(), msg.get_path(),
+                                  "org.freedesktop.DBus.Properties", "Get");
+        getSensorUnit.append("xyz.openbmc_project.Sensor.Value", "Unit");
+        std::variant<std::string> sensorUnit;
+        try
+        {
+            sdbusplus::message_t getSensorUnitResp = conn->call(getSensorUnit);
+            getSensorUnitResp.read(sensorUnit);
+        }
+        catch (const sdbusplus::exception_t&)
+        {
+            std::cerr << "Error getting sensor unit from " << msg.get_path()
+                      << "\n";
+            unit = "Unknown Unit";
+        }
+        if (unit != "Unknown Unit")
+        {
+            unit = std::get<std::string>(sensorUnit);
+            std::string unitPrefix("xyz.openbmc_project.Sensor.Value.Unit.");
+            if (std::string::size_type pos = unit.find(unitPrefix);
+                pos != std::string::npos)
+            {
+                unit.erase(pos, unitPrefix.length());
+            }
+            else
+            {
+                std::cerr << "Error getting sensor unit from " << unit << "\n";
+                unit = "Unknown Unit";
+            }
+        }
+
+        // redfishMessage format:
+        // <sensorName>,<sensorReading>,<sensorUnit>,<sensorThreshold>
+        std::string redfishMessage = std::format(
+            "{},{},{},{}", std::string(sensorName.data()),
+            std::to_string(assertValue), unit, std::to_string(thresholdVal));
+#else
         if (eventType != eventNone)
         {
             sdbusplus::message_t AddToLog = conn->new_method_call(
@@ -335,6 +459,8 @@ inline static sdbusplus::bus::match_t startThresholdAssertMonitor(
         std::string redfishMessage = sensorName.data();
         redfishMessage = redfishMessage + "," + std::to_string(assertValue) +
                          "," + std::to_string(thresholdVal);
+#endif
+
         selAddSystemRecord(redfishMessageID, redfishMessage,
                            std::string(msg.get_path()), eventData, assert,
                            selBMCGenID);

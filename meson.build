@@ -44,6 +44,9 @@ endif
 if get_option('sel-delete')
   cpp_args += '-DSEL_LOGGER_ENABLE_SEL_DELETE'
 endif
+if get_option('use-dmtf-registry')
+  cpp_args += '-DSEL_LOGGER_USE_DMTF_REGISTRY'
+endif
 
 executable(
   'sel-logger',
