@@ -15,22 +15,25 @@
 */
 
 #pragma once
-#include <filesystem>
+#include <sdbusplus/asio/connection.hpp>
 
-static constexpr const char* ipmiSelObject = "xyz.openbmc_project.Logging.IPMI";
-static constexpr const char* ipmiSelPath = "/xyz/openbmc_project/Logging/IPMI";
-static constexpr const char* ipmiSelAddInterface =
+#include <filesystem>
+#include <string>
+
+static constexpr const char *ipmiSelObject = "xyz.openbmc_project.Logging.IPMI";
+static constexpr const char *ipmiSelPath = "/xyz/openbmc_project/Logging/IPMI";
+static constexpr const char *ipmiSelAddInterface =
     "xyz.openbmc_project.Logging.IPMI";
 // SEL policy in dbus
-static constexpr const char* selLogObj = "xyz.openbmc_project.Settings";
-static constexpr const char* selLogPath =
+static constexpr const char *selLogObj = "xyz.openbmc_project.Settings";
+static constexpr const char *selLogPath =
     "/xyz/openbmc_project/logging/settings";
-static constexpr const char* selLogIntf =
+static constexpr const char *selLogIntf =
     "xyz.openbmc_project.Logging.Settings";
 
 // ID string generated using journalctl to include in the MESSAGE_ID field for
 // SEL entries.  Helps with filtering SEL entries in the journal.
-static constexpr const char* selMessageId = "b370836ccf2f4850ac5bee185b77893a";
+static constexpr const char *selMessageId = "b370836ccf2f4850ac5bee185b77893a";
 static constexpr int selPriority = 5; // notice
 static constexpr uint8_t selSystemType = 0x02;
 static constexpr uint16_t selBMCGenID = 0x0020;
@@ -57,13 +60,13 @@ static const std::string nextRecordFilename = "next_records";
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 
-static void selAddSystemRecord(const std::string& messageID,
-                               const std::string& message,
-                               const std::string& path,
-                               const std::vector<uint8_t>& selData,
-                               const bool& assert, const uint16_t& genId);
+static void selAddSystemRecord(const std::string &messageID,
+                               const std::string &message,
+                               const std::string &path,
+                               const std::vector<uint8_t> &selData,
+                               const bool &assert, const uint16_t &genId);
 
-std::string getService(const std::string& path, const std::string& interface);
+std::string getService(const std::string &path, const std::string &interface);
 constexpr auto mapperBus = "xyz.openbmc_project.ObjectMapper";
 constexpr auto mapperPath = "/xyz/openbmc_project/object_mapper";
 constexpr auto mapperInterface = "xyz.openbmc_project.ObjectMapper";
@@ -72,8 +75,8 @@ static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
 #else
 template <typename... T>
 static uint16_t
-    selAddSystemRecord(std::shared_ptr<sdbusplus::asio::connection> conn,
-                       const std::string& message, const std::string& path,
-                       const std::vector<uint8_t>& selData, const bool& assert,
-                       const uint16_t& genId, T&&... metadata);
+selAddSystemRecord(std::shared_ptr<sdbusplus::asio::connection> conn,
+                   const std::string &message, const std::string &path,
+                   const std::vector<uint8_t> &selData, const bool &assert,
+                   const uint16_t &genId, T &&...metadata);
 #endif

@@ -15,88 +15,76 @@
 */
 
 #pragma once
+#include <boost/container/flat_map.hpp>
 #include <sdbusplus/asio/object_server.hpp>
+#include <sdbusplus/bus/match.hpp>
 #include <sel_logger.hpp>
 #include <sensorutils.hpp>
 
 inline static sdbusplus::bus::match_t
-    startPulseEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn)
-{
-    auto pulseEventMatcherCallback = [conn](sdbusplus::message_t& msg) {
-        std::string thresholdInterface;
-        boost::container::flat_map<std::string, std::variant<std::string>>
-            propertiesChanged;
-        msg.read(thresholdInterface, propertiesChanged);
-        std::string objPath = msg.get_path();
+startPulseEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
+  auto pulseEventMatcherCallback = [conn](sdbusplus::message_t &msg) {
+    std::string thresholdInterface;
+    boost::container::flat_map<std::string, std::variant<std::string>>
+        propertiesChanged;
+    msg.read(thresholdInterface, propertiesChanged);
+    std::string objPath = msg.get_path();
 
-        if (propertiesChanged.empty())
-        {
-            return;
-        }
+    if (propertiesChanged.empty()) {
+      return;
+    }
 
-        std::string event = propertiesChanged.begin()->first;
+    std::string event = propertiesChanged.begin()->first;
 
-        auto variant =
-            std::get_if<std::string>(&propertiesChanged.begin()->second);
+    auto variant = std::get_if<std::string>(&propertiesChanged.begin()->second);
 
-        if (event.empty() || nullptr == variant)
-        {
-            return;
-        }
+    if (event.empty() || nullptr == variant) {
+      return;
+    }
 
-        if (event == "CurrentHostState")
-        {
-            std::string journalMsg = "Host";
-            std::string redfishMsgId;
-            std::string_view hostObjPathPrefix =
-                "/xyz/openbmc_project/state/host";
+    if (event == "CurrentHostState") {
+      std::string journalMsg = "Host";
+      std::string redfishMsgId;
+      std::string_view hostObjPathPrefix = "/xyz/openbmc_project/state/host";
 
-            if (objPath.starts_with(hostObjPathPrefix))
-            {
-                journalMsg += objPath.erase(0, hostObjPathPrefix.size());
-            }
+      if (objPath.starts_with(hostObjPathPrefix)) {
+        journalMsg += objPath.erase(0, hostObjPathPrefix.size());
+      }
 
-            if (*variant == "xyz.openbmc_project.State.Host.HostState.Off")
-            {
-                journalMsg += " system DC power is off";
-                redfishMsgId = "OpenBMC.0.1.DCPowerOff";
-            }
-            else if (*variant ==
-                     "xyz.openbmc_project.State.Host.HostState.Running")
-            {
-                journalMsg += " system DC power is on";
-                redfishMsgId = "OpenBMC.0.1.DCPowerOn";
-            }
-            else
-            {
-                return;
-            }
+      if (*variant == "xyz.openbmc_project.State.Host.HostState.Off") {
+        journalMsg += " state is off";
+        redfishMsgId = "OpenBMC.0.1.DCPowerOff";
+      } else if (*variant ==
+                 "xyz.openbmc_project.State.Host.HostState.Running") {
+        journalMsg += " state is on";
+        redfishMsgId = "OpenBMC.0.1.DCPowerOn";
+      } else {
+        return;
+      }
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-            sdbusplus::message_t newLogEntry = conn->new_method_call(
-                "xyz.openbmc_project.Logging", "/xyz/openbmc_project/logging",
-                "xyz.openbmc_project.Logging.Create", "Create");
-            const std::string logLevel =
-                "xyz.openbmc_project.Logging.Entry.Level.Informational";
-            const std::string hostPathName = "HOST_PATH";
-            const std::string hostPath = msg.get_path();
-            newLogEntry.append(
-                std::move(journalMsg), std::move(logLevel),
-                std::map<std::string, std::string>(
-                    {{std::move(hostPathName), std::move(hostPath)}}));
-            conn->call(newLogEntry);
+      sdbusplus::message_t newLogEntry = conn->new_method_call(
+          "xyz.openbmc_project.Logging", "/xyz/openbmc_project/logging",
+          "xyz.openbmc_project.Logging.Create", "Create");
+      const std::string logLevel =
+          "xyz.openbmc_project.Logging.Entry.Level.Informational";
+      const std::string hostPathName = "HOST_PATH";
+      const std::string hostPath = msg.get_path();
+      newLogEntry.append(std::move(journalMsg), std::move(logLevel),
+                         std::map<std::string, std::string>(
+                             {{std::move(hostPathName), std::move(hostPath)}}));
+      conn->call(newLogEntry);
 #else
-            sd_journal_send("MESSAGE=%s", journalMsg.c_str(),
-                            "REDFISH_MESSAGE_ID=%s", redfishMsgId.c_str(),
-                            NULL);
+      sd_journal_send("MESSAGE=%s", journalMsg.c_str(), "REDFISH_MESSAGE_ID=%s",
+                      redfishMsgId.c_str(), NULL);
 #endif
-        }
-    };
+    }
+  };
 
-    sdbusplus::bus::match_t pulseEventMatcher(
-        static_cast<sdbusplus::bus_t&>(*conn),
-        "type='signal',interface='org.freedesktop.DBus.Properties',member='"
-        "PropertiesChanged',arg0namespace='xyz.openbmc_project.State.Host'",
-        std::move(pulseEventMatcherCallback));
+  sdbusplus::bus::match_t pulseEventMatcher(
+      static_cast<sdbusplus::bus_t &>(*conn),
+      "type='signal',interface='org.freedesktop.DBus.Properties',member='"
+      "PropertiesChanged',arg0namespace='xyz.openbmc_project.State.Host'",
+      std::move(pulseEventMatcherCallback));
 
-    return pulseEventMatcher;
+  return pulseEventMatcher;
 }

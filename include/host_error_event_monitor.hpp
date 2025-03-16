@@ -16,6 +16,7 @@
 
 #pragma once
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 #include <sdbusplus/asio/object_server.hpp>
 #include <sel_logger.hpp>
 #include <sensorutils.hpp>
@@ -30,68 +31,56 @@ static boost::container::flat_set<std::string> hostErrorEvents;
 
 void hostErrorEventMonitor(
     [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
-    sdbusplus::message_t& msg)
-{
-    std::string msgInterface;
-    boost::container::flat_map<std::string, std::variant<bool>> values;
-    try
-    {
-        msg.read(msgInterface, values);
+    sdbusplus::message_t &msg) {
+  std::string msgInterface;
+  boost::container::flat_map<std::string, std::variant<bool>> values;
+  try {
+    msg.read(msgInterface, values);
+  } catch (const sdbusplus::exception_t &ec) {
+    std::cerr << "error getting asserted value from " << msg.get_path()
+              << " ec= " << ec.what() << "\n";
+    return;
+  }
+  std::string objectPath = msg.get_path();
+  auto findState = values.find("Asserted");
+  if (values.empty() || findState == values.end()) {
+    return;
+  }
+  bool assert = std::get<bool>(findState->second);
+  // Check if the log should be recorded.
+  if (assert) {
+    if (hostErrorEvents.insert(objectPath).second == false) {
+      return;
     }
-    catch (const sdbusplus::exception_t& ec)
-    {
-        std::cerr << "error getting asserted value from " << msg.get_path()
-                  << " ec= " << ec.what() << "\n";
-        return;
+  } else {
+    if (hostErrorEvents.erase(objectPath) == 0) {
+      return;
     }
-    std::string objectPath = msg.get_path();
-    auto findState = values.find("Asserted");
-    if (values.empty() || findState == values.end())
-    {
-        return;
-    }
-    bool assert = std::get<bool>(findState->second);
-    // Check if the log should be recorded.
-    if (assert)
-    {
-        if (hostErrorEvents.insert(objectPath).second == false)
-        {
-            return;
-        }
-    }
-    else
-    {
-        if (hostErrorEvents.erase(objectPath) == 0)
-        {
-            return;
-        }
-    }
-    std::string eventName = objectPath.substr(objectPath.find_last_of('/') + 1,
-                                              objectPath.length());
-    std::string message = (assert) ? eventName + " Asserted"
-                                   : eventName + " De-Asserted";
-    uint8_t selType = (msgInterface.ends_with("ThermalTrip")) ? 0x01 : 0x00;
+  }
+  std::string eventName =
+      objectPath.substr(objectPath.find_last_of('/') + 1, objectPath.length());
+  std::string message =
+      (assert) ? eventName + " Asserted" : eventName + " De-Asserted";
+  uint8_t selType = (msgInterface.ends_with("ThermalTrip")) ? 0x01 : 0x00;
 
-    std::vector<uint8_t> selData{selType, 0xff, 0xff};
+  std::vector<uint8_t> selData{selType, 0xff, 0xff};
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-    selAddSystemRecord(conn, message, objectPath, selData, assert, selBMCGenID);
+  selAddSystemRecord(conn, message, objectPath, selData, assert, selBMCGenID);
 #endif
 }
 
-inline static void startHostErrorEventMonitor(
-    std::shared_ptr<sdbusplus::asio::connection> conn)
-{
-    for (auto iter = hostErrorMatches.begin(); iter != hostErrorMatches.end();
-         iter++)
-    {
-        iter->second = std::make_shared<sdbusplus::bus::match_t>(
-            static_cast<sdbusplus::bus_t&>(*conn),
-            "type='signal',interface='org.freedesktop.DBus.Properties',member='"
-            "PropertiesChanged',arg0namespace='xyz.openbmc_project."
-            "HostErrorMonitor.Processor." +
-                iter->first + "'",
-            [conn, iter](sdbusplus::message_t& msg) {
-            hostErrorEventMonitor(conn, msg);
+inline static void
+startHostErrorEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
+  for (auto iter = hostErrorMatches.begin(); iter != hostErrorMatches.end();
+       iter++) {
+    iter->second = std::make_shared<sdbusplus::bus::match_t>(
+        static_cast<sdbusplus::bus_t &>(*conn),
+        "type='signal',interface='org.freedesktop.DBus.Properties',member='"
+        "PropertiesChanged',arg0namespace='xyz.openbmc_project."
+        "HostErrorMonitor.Processor." +
+            iter->first + "'",
+        [conn, iter](sdbusplus::message_t &msg) {
+          hostErrorEventMonitor(conn, msg);
         });
-    }
+  }
 }

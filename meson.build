@@ -1,13 +1,10 @@
 project(
-  'phosphor-sel-logger',
-  'cpp',
-  version: '0.1',
-  meson_version: '>=1.1.1',
-  default_options: [
-    'werror=true',
-    'warning_level=3',
-    'cpp_std=c++23',
-  ])
+    'phosphor-sel-logger',
+    'cpp',
+    version: '0.1',
+    meson_version: '>=1.1.1',
+    default_options: ['werror=true', 'warning_level=3', 'cpp_std=c++23'],
+)
 
 cpp_args = []
 
@@ -16,50 +13,55 @@ deps = [
   dependency('systemd'),
   dependency('boost'),
   dependency('libdbussdr'),
+  dependency('libsystemd')
 ]
 
 if get_option('log-threshold')
-  cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_EVENTS'
+    cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_EVENTS'
 endif
 if get_option('log-cable')
   cpp_args += '-DSEL_LOGGER_MONITOR_CABLE_EVENTS'
 endif
 if get_option('log-pulse')
-  cpp_args += '-DREDFISH_LOG_MONITOR_PULSE_EVENTS'
+    cpp_args += '-DREDFISH_LOG_MONITOR_PULSE_EVENTS'
 endif
 if get_option('log-watchdog')
-  cpp_args += '-DSEL_LOGGER_MONITOR_WATCHDOG_EVENTS'
+    cpp_args += '-DSEL_LOGGER_MONITOR_WATCHDOG_EVENTS'
 endif
 if get_option('log-alarm')
-  cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS'
+    cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS'
 endif
 if get_option('log-host')
-  cpp_args += '-DSEL_LOGGER_MONITOR_HOST_ERROR_EVENTS'
+    cpp_args += '-DSEL_LOGGER_MONITOR_HOST_ERROR_EVENTS'
 endif
 sel_capacity = get_option('sel-capacity')
 cpp_args += '-DSEL_CAPACITY=' + sel_capacity.to_string()  
 if get_option('send-to-logger')
-  cpp_args += '-DSEL_LOGGER_SEND_TO_LOGGING_SERVICE'
+    cpp_args += '-DSEL_LOGGER_SEND_TO_LOGGING_SERVICE'
 
-  deps += dependency('phosphor-logging')
+    deps += dependency('phosphor-logging')
 endif
 if get_option('sel-delete')
-  cpp_args += '-DSEL_LOGGER_ENABLE_SEL_DELETE'
+    cpp_args += '-DSEL_LOGGER_ENABLE_SEL_DELETE'
+
+    deps += dependency('phosphor-dbus-interfaces')
 endif
 
 executable(
-  'sel-logger',
-  'src/sel_logger.cpp',
-  include_directories: include_directories('include'),
-  implicit_include_directories: false,
-  cpp_args: cpp_args,
-  dependencies: deps,
-  install: true,
-  install_dir: get_option('bindir'))
+    'sel-logger',
+    'src/sel_logger.cpp',
+    include_directories: include_directories('include'),
+    implicit_include_directories: false,
+    cpp_args: cpp_args,
+    dependencies: deps,
+    install: true,
+    install_dir: get_option('bindir'),
+)
 
 systemd = dependency('systemd')
 if systemd.found()
-  install_data(
-    'service_files/xyz.openbmc_project.Logging.IPMI.service',
-    install_dir: systemd.get_variable('systemdsystemunitdir'))
+    install_data(
+        'service_files/xyz.openbmc_project.Logging.IPMI.service',
+        install_dir: systemd.get_variable('systemdsystemunitdir'),
+    )
 endif
