@@ -37,6 +37,37 @@ static constexpr const uint8_t thresholdEventDataTriggerReadingByte3 = (1 << 4);
 static const std::string openBMCMessageRegistryVersion("0.1");
 static const std::string dmtfMessageRegistryVersion("1.0");
 
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+bool isOutsideNormalRange(std::shared_ptr<sdbusplus::asio::connection> conn,
+                          std::string sender, std::string path) {
+  // Check if either warning alarm high or low is asserted
+  sdbusplus::message_t getwarningAsserted =
+      conn->new_method_call(sender.c_str(), path.c_str(),
+                            "org.freedesktop.DBus.Properties", "GetAll");
+  getwarningAsserted.append("xyz.openbmc_project.Sensor.Threshold.Warning");
+  boost::container::flat_map<std::string, std::variant<bool>> warningAsserted;
+  try {
+    sdbusplus::message_t getwarningAssertedResp =
+        conn->call(getwarningAsserted);
+    getwarningAssertedResp.read(warningAsserted);
+  } catch (const sdbusplus::exception_t &) {
+    std::cerr << "error getting warning asserted from " << path << "\n";
+    return false;
+  }
+  bool warningAssertedHigh = false;
+  auto findWarningAssertedHigh = warningAsserted.find("WarningAlarmHigh");
+  if (findWarningAssertedHigh != warningAsserted.end()) {
+    warningAssertedHigh = std::get<bool>(findWarningAssertedHigh->second);
+  }
+  bool warningAssertedLow = false;
+  auto findWarningAssertedLow = warningAsserted.find("WarningAlarmLow");
+  if (findWarningAssertedLow != warningAsserted.end()) {
+    warningAssertedLow = std::get<bool>(findWarningAssertedLow->second);
+  }
+  return warningAssertedHigh || warningAssertedLow;
+}
+#endif
+
 inline static sdbusplus::bus::match_t
 startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
   auto thresholdAssertMatcherCallback = [conn](sdbusplus::message_t &msg) {
@@ -189,7 +220,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
         eventType = eventInfo;
         direction = "high";
 #ifdef SEL_LOGGER_USE_DMTF_REGISTRY
-        redfishMessageID += ".ReadingAboveLowerCriticalThreshold";
+        if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+          redfishMessageID += ".ReadingAboveLowerCriticalThreshold";
+        } else {
+          redfishMessageID += ".SensorReadingNormalRange";
+        }
 #else
         redfishMessageID += ".SensorThresholdCriticalLowGoingHigh";
 #endif
@@ -205,13 +240,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
         redfishMessageID += ".SensorThresholdWarningLowGoingLow";
 #endif
       } else {
-#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
-        // No DMTF SensorEvent message for going above a warning-low
-        // threshold
-        return;
-#else
         eventType = eventInfo;
         direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+        redfishMessageID += ".SensorReadingNormalRange";
+#else
         redfishMessageID += ".SensorThresholdWarningLowGoingHigh";
 #endif
       }
@@ -226,13 +259,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
         redfishMessageID += ".SensorThresholdWarningHighGoingHigh";
 #endif
       } else {
-#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
-        // No DMTF SensorEvent message for going below a warning-high
-        // threshold
-        return;
-#else
         eventType = eventInfo;
         direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+        redfishMessageID += ".SensorReadingNormalRange";
+#else
         redfishMessageID += ".SensorThresholdWarningHighGoingLow";
 #endif
       }
@@ -250,7 +281,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
         eventType = eventInfo;
         direction = "low";
 #ifdef SEL_LOGGER_USE_DMTF_REGISTRY
-        redfishMessageID += ".ReadingBelowUpperCriticalThreshold";
+        if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+          redfishMessageID += ".ReadingBelowUpperCriticalThreshold";
+        } else {
+          redfishMessageID += ".SensorReadingNormalRange";
+        }
 #else
         redfishMessageID += ".SensorThresholdCriticalHighGoingLow";
 #endif
@@ -266,7 +301,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
       } else {
         eventType = eventInfo;
         direction = "high";
-        redfishMessageID += ".ReadingAboveLowerFatalThreshold";
+        if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+          redfishMessageID += ".ReadingAboveLowerFatalThreshold";
+        } else {
+          redfishMessageID += ".SensorReadingNormalRange";
+        }
       }
     } else if (event == "HardShutdownHigh") {
       threshold = "hard shutdown high";
@@ -277,7 +316,11 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
       } else {
         eventType = eventInfo;
         direction = "low";
-        redfishMessageID += ".ReadingBelowUpperFatalThreshold";
+        if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+          redfishMessageID += ".ReadingBelowUpperFatalThreshold";
+        } else {
+          redfishMessageID += ".SensorReadingNormalRange";
+        }
       }
     } else {
       // Other threshold types, such as SoftShutdown, are not supported
@@ -348,11 +391,21 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
       }
     }
 
-    // redfishMessage format:
-    // <sensorName>,<sensorReading>,<sensorUnit>,<sensorThreshold>
-    std::string redfishMessage = std::format(
-        "{},{},{},{}", std::string(sensorName.data()),
-        std::to_string(assertValue), unit, std::to_string(thresholdVal));
+    std::string redfishMessage = "";
+    if (redfishMessageID != "SensorEvent." + dmtfMessageRegistryVersion +
+                                ".SensorReadingNormalRange") {
+      // redfishMessage format:
+      // <sensorName>,<sensorReading>,<sensorUnit>,<sensorThreshold>
+      redfishMessage = std::format(
+          "{},{},{},{}", std::string(sensorName.data()),
+          std::to_string(assertValue), unit, std::to_string(thresholdVal));
+    } else {
+      // redfishMessage format:
+      // <sensorName>,<sensorReading>,<sensorUnit>
+      redfishMessage = std::format("{},{},{}", std::string(sensorName.data()),
+                                   std::to_string(assertValue), unit);
+    }
+
 #else
     if (eventType != eventNone) {
       sdbusplus::message_t AddToLog = conn->new_method_call(
