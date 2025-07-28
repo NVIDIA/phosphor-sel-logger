@@ -544,11 +544,31 @@ inline ErrLvl convertDbusSeverity(const std::string &msgId) {
   } else if ((msgId.find("ThresholdCriticalLowGoingLow") !=
               std::string::npos) ||
              (msgId.find("ThresholdCriticalHighGoingHigh") !=
-              std::string::npos)) {
-    return ErrLvl::Critical;
-  }
-
-  return ErrLvl::Informational;
+              std::string::npos))
+    {
+        return ErrLvl::Critical;
+    }
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+    else if ((msgId.find("ReadingBelowLowerCautionThreshold") !=
+              std::string::npos) ||
+             (msgId.find("ReadingAboveUpperCautionThreshold") !=
+              std::string::npos))
+    {
+        return ErrLvl::Warning;
+    }
+    else if ((msgId.find("ReadingBelowLowerCriticalThreshold") !=
+              std::string::npos) ||
+             (msgId.find("ReadingAboveUpperCriticalThreshold") !=
+              std::string::npos) ||
+             (msgId.find("ReadingBelowLowerFatalThreshold") !=
+              std::string::npos) ||
+             (msgId.find("ReadingAboveUpperFatalThreshold") !=
+              std::string::npos))
+    {
+        return ErrLvl::Critical;
+    }
+#endif
+    return ErrLvl::Informational;
 }
 
 static void

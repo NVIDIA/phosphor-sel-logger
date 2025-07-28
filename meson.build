@@ -46,6 +46,9 @@ if get_option('sel-delete')
 
     deps += dependency('phosphor-dbus-interfaces')
 endif
+if get_option('use-dmtf-registry')
+  cpp_args += '-DSEL_LOGGER_USE_DMTF_REGISTRY'
+endif
 
 executable(
     'sel-logger',
