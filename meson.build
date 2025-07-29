@@ -9,18 +9,18 @@ project(
 cpp_args = []
 
 deps = [
-  dependency('sdbusplus'),
-  dependency('systemd'),
-  dependency('boost'),
-  dependency('libdbussdr'),
-  dependency('libsystemd')
+    dependency('sdbusplus'),
+    dependency('systemd'),
+    dependency('boost'),
+    dependency('libdbussdr'),
+    dependency('libsystemd'),
 ]
 
 if get_option('log-threshold')
     cpp_args += '-DSEL_LOGGER_MONITOR_THRESHOLD_EVENTS'
 endif
 if get_option('log-cable')
-  cpp_args += '-DSEL_LOGGER_MONITOR_CABLE_EVENTS'
+    cpp_args += '-DSEL_LOGGER_MONITOR_CABLE_EVENTS'
 endif
 if get_option('log-pulse')
     cpp_args += '-DREDFISH_LOG_MONITOR_PULSE_EVENTS'
@@ -35,7 +35,7 @@ if get_option('log-host')
     cpp_args += '-DSEL_LOGGER_MONITOR_HOST_ERROR_EVENTS'
 endif
 sel_capacity = get_option('sel-capacity')
-cpp_args += '-DSEL_CAPACITY=' + sel_capacity.to_string()  
+cpp_args += '-DSEL_CAPACITY=' + sel_capacity.to_string()
 if get_option('send-to-logger')
     cpp_args += '-DSEL_LOGGER_SEND_TO_LOGGING_SERVICE'
 
@@ -47,7 +47,7 @@ if get_option('sel-delete')
     deps += dependency('phosphor-dbus-interfaces')
 endif
 if get_option('use-dmtf-registry')
-  cpp_args += '-DSEL_LOGGER_USE_DMTF_REGISTRY'
+    cpp_args += '-DSEL_LOGGER_USE_DMTF_REGISTRY'
 endif
 
 executable(
