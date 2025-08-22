@@ -15,6 +15,8 @@
 */
 
 #pragma once
+#include <systemd/sd-journal.h>
+
 #include <sdbusplus/asio/connection.hpp>
 
 #include <filesystem>
@@ -52,6 +54,9 @@ static const std::string selLogFilename = "ipmi_sel";
 
 #ifdef SEL_LOGGER_ENABLE_SEL_DELETE
 static const std::string nextRecordFilename = "next_records";
+uint16_t getNewRecordId();
+#else
+unsigned int getNewRecordId();
 #endif
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
@@ -60,11 +65,11 @@ static const std::string nextRecordFilename = "next_records";
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 
-static void selAddSystemRecord(const std::string &messageID,
-                               const std::string &message,
-                               const std::string &path,
-                               const std::vector<uint8_t> &selData,
-                               const bool &assert, const uint16_t &genId);
+void selAddSystemRecord(const std::string &messageID,
+    const std::string &message,
+    const std::string &path,
+    const std::vector<uint8_t> &selData,
+    const bool &assert, const uint16_t &genId);
 
 std::string getService(const std::string &path, const std::string &interface);
 constexpr auto mapperBus = "xyz.openbmc_project.ObjectMapper";
@@ -74,9 +79,8 @@ static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
 static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
 #else
 template <typename... T>
-static uint16_t
-selAddSystemRecord(std::shared_ptr<sdbusplus::asio::connection> conn,
-                   const std::string &message, const std::string &path,
-                   const std::vector<uint8_t> &selData, const bool &assert,
-                   const uint16_t &genId, T &&...metadata);
+uint16_t selAddSystemRecord(std::shared_ptr<sdbusplus::asio::connection> conn,
+    const std::string &message, const std::string &path,
+    const std::vector<uint8_t> &selData, const bool &assert,
+    const uint16_t &genId, T &&...metadata);
 #endif

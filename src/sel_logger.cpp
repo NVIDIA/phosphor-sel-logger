@@ -213,18 +213,21 @@ static void backupCacheToFile() {
   }
 }
 
-static uint16_t getNewRecordId() {
-  uint16_t nextRecordId = nextRecordsCache.back();
-  // Check if SEL is full
-  if (nextRecordId == selInvalidRecID) {
+uint16_t getNewRecordId()
+{
+    uint16_t nextRecordId = nextRecordsCache.back();
+    // Check if SEL is full
+    if (nextRecordId == selInvalidRecID)
+    {
+        return nextRecordId;
+    }
+    nextRecordsCache.pop_back();
+    if (nextRecordsCache.empty())
+    {
+        nextRecordsCache.push_back(nextRecordId + 1);
+    }
+    backupCacheToFile();
     return nextRecordId;
-  }
-  nextRecordsCache.pop_back();
-  if (nextRecordsCache.empty()) {
-    nextRecordsCache.push_back(nextRecordId + 1);
-  }
-  backupCacheToFile();
-  return nextRecordId;
 }
 
 static void initializeRecordId() {
@@ -371,11 +374,13 @@ static unsigned int initializeRecordId() {
 
 static unsigned int recordId = initializeRecordId();
 
-static unsigned int getNewRecordId() {
-  if (++recordId >= selInvalidRecID) {
-    recordId = selInvalidRecID;
-  }
-  return recordId;
+unsigned int getNewRecordId()
+{
+    if (++recordId >= selInvalidRecID)
+    {
+        recordId = selInvalidRecID;
+    }
+    return recordId;
 }
 
 void clearSelLogFiles() {
@@ -567,13 +572,12 @@ inline ErrLvl convertDbusSeverity(const std::string &msgId) {
   return ErrLvl::Informational;
 }
 
-static void
-selAddSystemRecord(const std::string &messageID, const std::string &message,
-                   const std::string &path, const std::vector<uint8_t> &selData,
-                   const bool &assert, const uint16_t &genId)
+void selAddSystemRecord(const std::string &messageID, const std::string &message,
+    const std::string &path, const std::vector<uint8_t> &selData,
+    const bool &assert, const uint16_t &genId)
 #else
 template <typename... T>
-static uint16_t selAddSystemRecord(
+uint16_t selAddSystemRecord(
     [[maybe_unused]] std::shared_ptr<sdbusplus::asio::connection> conn,
     [[maybe_unused]] const std::string &message, const std::string &path,
     const std::vector<uint8_t> &selData, const bool &assert,
