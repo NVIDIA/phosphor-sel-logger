@@ -15,7 +15,6 @@
 */
 #include <systemd/sd-journal.h>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
@@ -72,14 +71,18 @@ struct DBusInternalError final : public sdbusplus::exception_t {
 };
 
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-static bool getSELLogFiles(std::vector<std::filesystem::path> &selLogFiles) {
-  // Loop through the directory looking for ipmi_sel log files
-  for (const std::filesystem::directory_entry &dirEnt :
-       std::filesystem::directory_iterator(selLogDir)) {
-    std::string filename = dirEnt.path().filename();
-    if (boost::starts_with(filename, selLogFilename)) {
-      // If we find an ipmi_sel log file, save the path
-      selLogFiles.emplace_back(selLogDir / filename);
+static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
+{
+    // Loop through the directory looking for ipmi_sel log files
+    for (const std::filesystem::directory_entry& dirEnt :
+         std::filesystem::directory_iterator(selLogDir))
+    {
+        std::string filename = dirEnt.path().filename();
+        if (filename.starts_with(selLogFilename))
+        {
+            // If we find an ipmi_sel log file, save the path
+            selLogFiles.emplace_back(selLogDir / filename);
+        }
     }
   }
   // As the log files rotate, they are appended with a ".#" that is higher for
