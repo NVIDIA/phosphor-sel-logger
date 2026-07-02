@@ -73,26 +73,23 @@ struct DBusInternalError final : public sdbusplus::exception_t {
 };
 
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
-{
-    // Loop through the directory looking for ipmi_sel log files
-    for (const std::filesystem::directory_entry& dirEnt :
-         std::filesystem::directory_iterator(selLogDir))
-    {
-        std::string filename = dirEnt.path().filename();
-        if (filename.starts_with(selLogFilename))
-        {
-            // If we find an ipmi_sel log file, save the path
-            selLogFiles.emplace_back(selLogDir / filename);
-        }
+static bool getSELLogFiles(std::vector<std::filesystem::path> &selLogFiles) {
+  // Loop through the directory looking for ipmi_sel log files
+  for (const std::filesystem::directory_entry &dirEnt :
+       std::filesystem::directory_iterator(selLogDir)) {
+    std::string filename = dirEnt.path().filename();
+    if (filename.starts_with(selLogFilename)) {
+      // If we find an ipmi_sel log file, save the path
+      selLogFiles.emplace_back(selLogDir / filename);
     }
   }
-  // As the log files rotate, they are appended with a ".#" that is higher for
-  // the older logs. Since we don't expect more than 10 log files, we
-  // can just sort the list to get them in order from newest to oldest
-  std::sort(selLogFiles.begin(), selLogFiles.end());
+}
+// As the log files rotate, they are appended with a ".#" that is higher for
+// the older logs. Since we don't expect more than 10 log files, we
+// can just sort the list to get them in order from newest to oldest
+std::sort(selLogFiles.begin(), selLogFiles.end());
 
-  return !selLogFiles.empty();
+return !selLogFiles.empty();
 }
 
 static bool isLinearSELPolicy() {
@@ -218,21 +215,18 @@ static void backupCacheToFile() {
   }
 }
 
-uint16_t getNewRecordId()
-{
-    uint16_t nextRecordId = nextRecordsCache.back();
-    // Check if SEL is full
-    if (nextRecordId == selInvalidRecID)
-    {
-        return nextRecordId;
-    }
-    nextRecordsCache.pop_back();
-    if (nextRecordsCache.empty())
-    {
-        nextRecordsCache.push_back(nextRecordId + 1);
-    }
-    backupCacheToFile();
+uint16_t getNewRecordId() {
+  uint16_t nextRecordId = nextRecordsCache.back();
+  // Check if SEL is full
+  if (nextRecordId == selInvalidRecID) {
     return nextRecordId;
+  }
+  nextRecordsCache.pop_back();
+  if (nextRecordsCache.empty()) {
+    nextRecordsCache.push_back(nextRecordId + 1);
+  }
+  backupCacheToFile();
+  return nextRecordId;
 }
 
 static void initializeRecordId() {
@@ -379,13 +373,11 @@ static unsigned int initializeRecordId() {
 
 static unsigned int recordId = initializeRecordId();
 
-unsigned int getNewRecordId()
-{
-    if (++recordId >= selInvalidRecID)
-    {
-        recordId = selInvalidRecID;
-    }
-    return recordId;
+unsigned int getNewRecordId() {
+  if (++recordId >= selInvalidRecID) {
+    recordId = selInvalidRecID;
+  }
+  return recordId;
 }
 
 void clearSelLogFiles() {
@@ -577,9 +569,10 @@ inline ErrLvl convertDbusSeverity(const std::string &msgId) {
   return ErrLvl::Informational;
 }
 
-void selAddSystemRecord(const std::string &messageID, const std::string &message,
-    const std::string &path, const std::vector<uint8_t> &selData,
-    const bool &assert, const uint16_t &genId)
+void selAddSystemRecord(const std::string &messageID,
+                        const std::string &message, const std::string &path,
+                        const std::vector<uint8_t> &selData, const bool &assert,
+                        const uint16_t &genId)
 #else
 template <typename... T>
 uint16_t selAddSystemRecord(

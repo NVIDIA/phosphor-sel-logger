@@ -198,11 +198,10 @@ inline static void sendWatchdogEventLog(
   }
 }
 
-inline static sdbusplus::bus::match_t startWatchdogEventMonitor(
-    std::shared_ptr<sdbusplus::asio::connection> conn)
-{
-    auto watchdogEventMatcherCallback = [conn](sdbusplus::message_t& msg) {
-        auto expiredAction = msg.unpack<std::string>();
+inline static sdbusplus::bus::match_t
+startWatchdogEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
+  auto watchdogEventMatcherCallback = [conn](sdbusplus::message_t &msg) {
+    auto expiredAction = msg.unpack<std::string>();
 
     std::string_view action = expiredAction;
     action.remove_prefix(std::min(action.find_last_of(".") + 1, action.size()));
