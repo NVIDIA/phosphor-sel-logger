@@ -22,7 +22,9 @@
 #include <sel_logger.hpp>
 #include <sensorutils.hpp>
 
+#include <format>
 #include <map>
+#include <optional>
 #include <string_view>
 #include <variant>
 
@@ -35,6 +37,12 @@ static sdbusMatch criticalLowAssertedMatcher;
 static sdbusMatch criticalLowDeassertedMatcher;
 static sdbusMatch criticalHighAssertedMatcher;
 static sdbusMatch criticalHighDeassertedMatcher;
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+static sdbusMatch hardShutdownLowAssertedMatcher;
+static sdbusMatch hardShutdownLowDeassertedMatcher;
+static sdbusMatch hardShutdownHighAssertedMatcher;
+static sdbusMatch hardShutdownHighDeassertedMatcher;
+#endif
 
 static boost::container::flat_map<std::string, sdbusMatch> matchers = {
     {"WarningLowAlarmAsserted", warningLowAssertedMatcher},
@@ -44,7 +52,14 @@ static boost::container::flat_map<std::string, sdbusMatch> matchers = {
     {"CriticalLowAlarmAsserted", criticalLowAssertedMatcher},
     {"CriticalLowAlarmDeasserted", criticalLowDeassertedMatcher},
     {"CriticalHighAlarmAsserted", criticalHighAssertedMatcher},
-    {"CriticalHighAlarmDeasserted", criticalHighDeassertedMatcher}};
+    {"CriticalHighAlarmDeasserted", criticalHighDeassertedMatcher},
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+    {"HardShutdownLowAlarmAsserted", hardShutdownLowAssertedMatcher},
+    {"HardShutdownLowAlarmDeasserted", hardShutdownLowDeassertedMatcher},
+    {"HardShutdownHighAlarmAsserted", hardShutdownHighAssertedMatcher},
+    {"HardShutdownHighAlarmDeasserted", hardShutdownHighDeassertedMatcher}
+#endif
+};
 
 void generateEvent(std::string signalName,
                    std::shared_ptr<sdbusplus::asio::connection> conn,
@@ -64,7 +79,11 @@ void generateEvent(std::string signalName,
   std::string direction;
   bool assert = false;
   std::vector<uint8_t> eventData(selEvtDataMaxSize, selEvtDataUnspecified);
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+  std::string redfishMessageID = "SensorEvent." + dmtfMessageRegistryVersion;
+#else
   std::string redfishMessageID = "OpenBMC." + openBMCMessageRegistryVersion;
+#endif
 
   if (signalName == "WarningLowAlarmAsserted" ||
       signalName == "WarningLowAlarmDeasserted") {
@@ -76,10 +95,18 @@ void generateEvent(std::string signalName,
     if (signalName == "WarningLowAlarmAsserted") {
       assert = true;
       direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".ReadingBelowLowerCautionThreshold";
+#else
       redfishMessageID += ".SensorThresholdWarningLowGoingLow";
+#endif
     } else if (signalName == "WarningLowAlarmDeasserted") {
       direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".SensorReadingNormalRange";
+#else
       redfishMessageID += ".SensorThresholdWarningLowGoingHigh";
+#endif
     }
   } else if (signalName == "WarningHighAlarmAsserted" ||
              signalName == "WarningHighAlarmDeasserted") {
@@ -91,10 +118,18 @@ void generateEvent(std::string signalName,
     if (signalName == "WarningHighAlarmAsserted") {
       assert = true;
       direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".ReadingAboveUpperCautionThreshold";
+#else
       redfishMessageID += ".SensorThresholdWarningHighGoingHigh";
+#endif
     } else if (signalName == "WarningHighAlarmDeasserted") {
       direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".SensorReadingNormalRange";
+#else
       redfishMessageID += ".SensorThresholdWarningHighGoingLow";
+#endif
     }
   } else if (signalName == "CriticalLowAlarmAsserted" ||
              signalName == "CriticalLowAlarmDeasserted") {
@@ -106,10 +141,22 @@ void generateEvent(std::string signalName,
     if (signalName == "CriticalLowAlarmAsserted") {
       assert = true;
       direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".ReadingBelowLowerCriticalThreshold";
+#else
       redfishMessageID += ".SensorThresholdCriticalLowGoingLow";
+#endif
     } else if (signalName == "CriticalLowAlarmDeasserted") {
       direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+        redfishMessageID += ".ReadingAboveLowerCriticalThreshold";
+      } else {
+        redfishMessageID += ".SensorReadingNormalRange";
+      }
+#else
       redfishMessageID += ".SensorThresholdCriticalLowGoingHigh";
+#endif
     }
   } else if (signalName == "CriticalHighAlarmAsserted" ||
              signalName == "CriticalHighAlarmDeasserted") {
@@ -121,11 +168,71 @@ void generateEvent(std::string signalName,
     if (signalName == "CriticalHighAlarmAsserted") {
       assert = true;
       direction = "high";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      redfishMessageID += ".ReadingAboveUpperCriticalThreshold";
+#else
       redfishMessageID += ".SensorThresholdCriticalHighGoingHigh";
+#endif
     } else if (signalName == "CriticalHighAlarmDeasserted") {
       direction = "low";
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+      if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+        redfishMessageID += ".ReadingBelowUpperCriticalThreshold";
+      } else {
+        redfishMessageID += ".SensorReadingNormalRange";
+      }
+#else
       redfishMessageID += ".SensorThresholdCriticalHighGoingLow";
+#endif
     }
+  }
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+  else if (signalName == "HardShutdownLowAlarmAsserted" ||
+           signalName == "HardShutdownLowAlarmDeasserted") {
+    event = "HardShutdownLow";
+    thresholdInterface = "xyz.openbmc_project.Sensor.Threshold.HardShutdown";
+    // IPMI has no fatal offset; use the nearest lower-critical code
+    eventData[0] =
+        static_cast<uint8_t>(thresholdEventOffsets::lowerCritGoingLow);
+    threshold = "hard shutdown low";
+    if (signalName == "HardShutdownLowAlarmAsserted") {
+      assert = true;
+      direction = "low";
+      redfishMessageID += ".ReadingBelowLowerFatalThreshold";
+    } else if (signalName == "HardShutdownLowAlarmDeasserted") {
+      direction = "high";
+      if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+        redfishMessageID += ".ReadingAboveLowerFatalThreshold";
+      } else {
+        redfishMessageID += ".SensorReadingNormalRange";
+      }
+    }
+  } else if (signalName == "HardShutdownHighAlarmAsserted" ||
+             signalName == "HardShutdownHighAlarmDeasserted") {
+    event = "HardShutdownHigh";
+    thresholdInterface = "xyz.openbmc_project.Sensor.Threshold.HardShutdown";
+    // IPMI has no fatal offset; use the nearest upper-critical code
+    eventData[0] =
+        static_cast<uint8_t>(thresholdEventOffsets::upperCritGoingHigh);
+    threshold = "hard shutdown high";
+    if (signalName == "HardShutdownHighAlarmAsserted") {
+      assert = true;
+      direction = "high";
+      redfishMessageID += ".ReadingAboveUpperFatalThreshold";
+    } else if (signalName == "HardShutdownHighAlarmDeasserted") {
+      direction = "low";
+      if (isOutsideNormalRange(conn, msg.get_sender(), msg.get_path())) {
+        redfishMessageID += ".ReadingBelowUpperFatalThreshold";
+      } else {
+        redfishMessageID += ".SensorReadingNormalRange";
+      }
+    }
+  }
+#endif
+  else {
+    // Unsupported signal (e.g. HardShutdown under the OpenBMC registry, which
+    // has no fatal message); skip logging.
+    return;
   }
   // Indicate that bytes 2 and 3 are threshold sensor trigger values
   eventData[0] |= thresholdEventDataTriggerReadingByte2 |
@@ -202,19 +309,84 @@ void generateEvent(std::string signalName,
                          ". Reading=" + std::to_string(assertValue) +
                          " Threshold=" + std::to_string(thresholdVal) + ".");
 
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+  // DMTF SensorEvent messages take the sensor unit as an argument, so fetch it
+  // and strip the "xyz.openbmc_project.Sensor.Value.Unit." prefix. Needed on
+  // both the logging-service and journal paths. nullopt if it could not be
+  // determined.
+  std::optional<std::string> unit;
+  sdbusplus::message_t getSensorUnit =
+      conn->new_method_call(msg.get_sender(), msg.get_path(),
+                            "org.freedesktop.DBus.Properties", "Get");
+  getSensorUnit.append("xyz.openbmc_project.Sensor.Value", "Unit");
+  try {
+    std::variant<std::string> sensorUnit;
+    conn->call(getSensorUnit).read(sensorUnit);
+    std::string sensorUnitStr = std::get<std::string>(sensorUnit);
+    std::string unitPrefix("xyz.openbmc_project.Sensor.Value.Unit.");
+    if (sensorUnitStr.starts_with(unitPrefix)) {
+      sensorUnitStr.erase(0, unitPrefix.length());
+      unit = sensorUnitStr;
+    } else {
+      std::cerr << "Unexpected sensor unit format: " << sensorUnitStr << "\n";
+    }
+  } catch (const sdbusplus::exception_t &) {
+    std::cerr << "Error getting sensor unit from " << msg.get_path() << "\n";
+  }
+  // Value used for the unit argument (and event-log text) when the sensor's
+  // unit could not be determined.
+  std::string unitStr = unit.value_or("Unknown Unit");
+  // NormalRange has no threshold argument; every other message carries one.
+  bool isNormalRange =
+      (redfishMessageID == "SensorEvent." + dmtfMessageRegistryVersion +
+                               ".SensorReadingNormalRange");
+#endif
+
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+  std::string redfishMessage = "";
+  if (!isNormalRange) {
+    // <sensorName>,<sensorReading>,<sensorUnit>,<sensorThreshold>
+    redfishMessage = std::format("{},{},{},{}", std::string(sensorName),
+                                 std::to_string(assertValue), unitStr,
+                                 std::to_string(thresholdVal));
+  } else {
+    // <sensorName>,<sensorReading>,<sensorUnit>
+    redfishMessage = std::format("{},{},{}", std::string(sensorName),
+                                 std::to_string(assertValue), unitStr);
+  }
+#else
   std::string redfishMessage = sensorName.data();
   redfishMessage = redfishMessage + "," + std::to_string(assertValue) + "," +
                    std::to_string(thresholdVal);
+#endif
   selAddSystemRecord(redfishMessageID, redfishMessage,
                      std::string(msg.get_path()), eventData, assert,
                      selBMCGenID);
 #else
-  selAddSystemRecord(conn, journalMsg, std::string(msg.get_path()), eventData,
-                     assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
-                     redfishMessageID.c_str(),
-                     "REDFISH_MESSAGE_ARGS=%.*s,%f,%f", sensorName.length(),
-                     sensorName.data(), assertValue, thresholdVal);
+#ifdef SEL_LOGGER_USE_DMTF_REGISTRY
+  if (!isNormalRange) {
+    selAddSystemRecord(conn, journalMsg, std::string(msg.get_path()), eventData,
+                       assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
+                       redfishMessageID.c_str(),
+                       "REDFISH_MESSAGE_ARGS=%.*s,%f,%s,%f",
+                       static_cast<int>(sensorName.length()), sensorName.data(),
+                       assertValue, unitStr.c_str(), thresholdVal);
+  } else {
+    selAddSystemRecord(conn, journalMsg, std::string(msg.get_path()), eventData,
+                       assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
+                       redfishMessageID.c_str(),
+                       "REDFISH_MESSAGE_ARGS=%.*s,%f,%s",
+                       static_cast<int>(sensorName.length()), sensorName.data(),
+                       assertValue, unitStr.c_str());
+  }
+#else
+  selAddSystemRecord(
+      conn, journalMsg, std::string(msg.get_path()), eventData, assert,
+      selBMCGenID, "REDFISH_MESSAGE_ID=%s", redfishMessageID.c_str(),
+      "REDFISH_MESSAGE_ARGS=%.*s,%f,%f", static_cast<int>(sensorName.length()),
+      sensorName.data(), assertValue, thresholdVal);
+#endif
 #endif
 }
 
