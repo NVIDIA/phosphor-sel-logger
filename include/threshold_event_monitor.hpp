@@ -432,8 +432,9 @@ startThresholdAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
     selAddSystemRecord(conn, journalMsg, std::string(msg.get_path()), eventData,
                        assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
                        redfishMessageID.c_str(),
-                       "REDFISH_MESSAGE_ARGS=%.*s,%f,%f", sensorName.length(),
-                       sensorName.data(), assertValue, thresholdVal);
+                       "REDFISH_MESSAGE_ARGS=%.*s,%f,%f",
+                       static_cast<int>(sensorName.length()), sensorName.data(),
+                       assertValue, thresholdVal);
 #endif
   };
   sdbusplus::bus::match_t thresholdAssertMatcher(
