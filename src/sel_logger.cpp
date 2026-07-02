@@ -213,21 +213,18 @@ static void backupCacheToFile() {
   }
 }
 
-uint16_t getNewRecordId()
-{
-    uint16_t nextRecordId = nextRecordsCache.back();
-    // Check if SEL is full
-    if (nextRecordId == selInvalidRecID)
-    {
-        return nextRecordId;
-    }
-    nextRecordsCache.pop_back();
-    if (nextRecordsCache.empty())
-    {
-        nextRecordsCache.push_back(nextRecordId + 1);
-    }
-    backupCacheToFile();
+uint16_t getNewRecordId() {
+  uint16_t nextRecordId = nextRecordsCache.back();
+  // Check if SEL is full
+  if (nextRecordId == selInvalidRecID) {
     return nextRecordId;
+  }
+  nextRecordsCache.pop_back();
+  if (nextRecordsCache.empty()) {
+    nextRecordsCache.push_back(nextRecordId + 1);
+  }
+  backupCacheToFile();
+  return nextRecordId;
 }
 
 static void initializeRecordId() {
@@ -374,13 +371,11 @@ static unsigned int initializeRecordId() {
 
 static unsigned int recordId = initializeRecordId();
 
-unsigned int getNewRecordId()
-{
-    if (++recordId >= selInvalidRecID)
-    {
-        recordId = selInvalidRecID;
-    }
-    return recordId;
+unsigned int getNewRecordId() {
+  if (++recordId >= selInvalidRecID) {
+    recordId = selInvalidRecID;
+  }
+  return recordId;
 }
 
 void clearSelLogFiles() {
@@ -572,9 +567,10 @@ inline ErrLvl convertDbusSeverity(const std::string &msgId) {
   return ErrLvl::Informational;
 }
 
-void selAddSystemRecord(const std::string &messageID, const std::string &message,
-    const std::string &path, const std::vector<uint8_t> &selData,
-    const bool &assert, const uint16_t &genId)
+void selAddSystemRecord(const std::string &messageID,
+                        const std::string &message, const std::string &path,
+                        const std::vector<uint8_t> &selData, const bool &assert,
+                        const uint16_t &genId)
 #else
 template <typename... T>
 uint16_t selAddSystemRecord(
