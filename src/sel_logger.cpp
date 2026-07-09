@@ -83,13 +83,12 @@ static bool getSELLogFiles(std::vector<std::filesystem::path> &selLogFiles) {
       selLogFiles.emplace_back(selLogDir / filename);
     }
   }
-}
-// As the log files rotate, they are appended with a ".#" that is higher for
-// the older logs. Since we don't expect more than 10 log files, we
-// can just sort the list to get them in order from newest to oldest
-std::sort(selLogFiles.begin(), selLogFiles.end());
+  // As the log files rotate, they are appended with a ".#" that is higher for
+  // the older logs. Since we don't expect more than 10 log files, we
+  // can just sort the list to get them in order from newest to oldest
+  std::sort(selLogFiles.begin(), selLogFiles.end());
 
-return !selLogFiles.empty();
+  return !selLogFiles.empty();
 }
 
 static bool isLinearSELPolicy() {
