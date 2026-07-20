@@ -30,9 +30,9 @@ enum class cableStatusEvent : uint8_t {
 };
 
 static const std::string openBMCMessageRegistryVersionCable("0.1");
-inline static sdbusplus::bus::match::match
+inline static sdbusplus::bus::match_t
 startCableAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
-  auto cableAssertMatcherCallback = [conn](sdbusplus::message::message &msg) {
+  auto cableAssertMatcherCallback = [conn](sdbusplus::message_t &msg) {
     // This static set of std::pair<path, event> tracks asserted events to
     // avoid duplicate logs or deasserts logged without an assert
     std::vector<uint8_t> eventData(selEvtDataMaxSize, selEvtDataUnspecified);
@@ -79,8 +79,8 @@ startCableAssertMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
                        sensorName.length(), sensorName.data());
 #endif
   };
-  sdbusplus::bus::match::match cableAssertMatcher(
-      static_cast<sdbusplus::bus::bus &>(*conn),
+  sdbusplus::bus::match_t cableAssertMatcher(
+      static_cast<sdbusplus::bus_t &>(*conn),
       "type='signal', member='CableStatus'",
       std::move(cableAssertMatcherCallback));
   return cableAssertMatcher;
