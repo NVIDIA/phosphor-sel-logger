@@ -513,7 +513,7 @@ static void writeSELEvent(const unsigned int &recordId,
 }
 #endif
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-std::string getService(sdbusplus::bus::bus &bus, const std::string &path,
+std::string getService(sdbusplus::bus_t &bus, const std::string &path,
                        const std::string &interface) {
   auto method =
       bus.new_method_call(mapperBus, mapperPath, mapperInterface, "GetObject");
@@ -760,8 +760,7 @@ int main(int, char *[]) {
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_CABLE_EVENTS
-  sdbusplus::bus::match::match cableAssertMonitor =
-      startCableAssertMonitor(conn);
+  sdbusplus::bus::match_t cableAssertMonitor = startCableAssertMonitor(conn);
 #endif
 
 #ifdef REDFISH_LOG_MONITOR_PULSE_EVENTS
