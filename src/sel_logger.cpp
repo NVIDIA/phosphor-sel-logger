@@ -73,14 +73,18 @@ struct DBusInternalError final : public sdbusplus::exception_t {
 };
 
 #ifndef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-static bool getSELLogFiles(std::vector<std::filesystem::path> &selLogFiles) {
-  // Loop through the directory looking for ipmi_sel log files
-  for (const std::filesystem::directory_entry &dirEnt :
-       std::filesystem::directory_iterator(selLogDir)) {
-    std::string filename = dirEnt.path().filename();
-    if (filename.starts_with(selLogFilename)) {
-      // If we find an ipmi_sel log file, save the path
-      selLogFiles.emplace_back(selLogDir / filename);
+static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
+{
+    // Loop through the directory looking for ipmi_sel log files
+    for (const std::filesystem::directory_entry& dirEnt :
+         std::filesystem::directory_iterator(selLogDir))
+    {
+        std::string filename = dirEnt.path().filename();
+        if (filename.starts_with(selLogFilename))
+        {
+            // If we find an ipmi_sel log file, save the path
+            selLogFiles.emplace_back(selLogDir / filename);
+        }
     }
   }
   // As the log files rotate, they are appended with a ".#" that is higher for
@@ -207,11 +211,13 @@ static void saveClearSelTimestamp() {
 #ifdef SEL_LOGGER_ENABLE_SEL_DELETE
 std::vector<uint16_t> nextRecordsCache;
 
-static void backupCacheToFile() {
-  std::ofstream nextRecordStream(selLogDir / nextRecordFilename);
-  for (auto recordIds : nextRecordsCache) {
-    nextRecordStream << recordIds << '\n';
-  }
+static void backupCacheToFile()
+{
+    std::ofstream nextRecordStream(selLogDir / nextRecordFilename);
+    for (const auto& recordIds : nextRecordsCache)
+    {
+        nextRecordStream << recordIds << '\n';
+    }
 }
 
 uint16_t getNewRecordId() {
@@ -676,16 +682,23 @@ static uint16_t selAddOemRecord(
       ", GeneratorID=" + std::to_string(0) + ", EventDir=" + std::to_string(0) +
       ", EventData=" + selDataStr);
 
-  AddToLog.append(journalMsg,
-                  "xyz.openbmc_project.Logging.Entry.Level.Informational",
-                  std::map<std::string, std::string>(
-                      {{"SENSOR_PATH", ""},
-                       {"GENERATOR_ID", std::to_string(0)},
-                       {"RECORD_TYPE", std::to_string(recordType)},
-                       {"EVENT_DIR", std::to_string(0)},
-                       {"SENSOR_DATA", selDataStr}}));
-  conn->call(AddToLog);
-  return 0;
+    try
+    {
+        AddToLog.append(
+            journalMsg, "xyz.openbmc_project.Logging.Entry.Level.Informational",
+            std::map<std::string, std::string>(
+                {{"SENSOR_PATH", ""},
+                 {"GENERATOR_ID", std::to_string(0)},
+                 {"RECORD_TYPE", std::to_string(recordType)},
+                 {"EVENT_DIR", std::to_string(0)},
+                 {"SENSOR_DATA", selDataStr}}));
+        conn->call(AddToLog);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed adding this event: " << e.what() << "\n";
+    }
+    return 0;
 #else
     unsigned int recordId = getNewRecordId();
     if (recordId < selInvalidRecID) {
@@ -756,21 +769,19 @@ int main(int, char *[]) {
   ifaceAddSel->initialize();
 
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_EVENTS
-  sdbusplus::bus::match_t thresholdAssertMonitor =
-      startThresholdAssertMonitor(conn);
+    sdbusplus::match thresholdAssertMonitor = startThresholdAssertMonitor(conn);
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_CABLE_EVENTS
-  sdbusplus::bus::match_t cableAssertMonitor = startCableAssertMonitor(conn);
+    sdbusplus::match cableAssertMonitor = startCableAssertMonitor(conn);
 #endif
 
 #ifdef REDFISH_LOG_MONITOR_PULSE_EVENTS
-  sdbusplus::bus::match_t pulseEventMonitor = startPulseEventMonitor(conn);
+    sdbusplus::match pulseEventMonitor = startPulseEventMonitor(conn);
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_WATCHDOG_EVENTS
-  sdbusplus::bus::match_t watchdogEventMonitor =
-      startWatchdogEventMonitor(conn);
+    sdbusplus::match watchdogEventMonitor = startWatchdogEventMonitor(conn);
 #endif
 
 #ifdef SEL_LOGGER_MONITOR_THRESHOLD_ALARM_EVENTS

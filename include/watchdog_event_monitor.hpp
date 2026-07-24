@@ -183,13 +183,13 @@ inline static void sendWatchdogEventLog(
         " seconds " + std::string(*expireAction) + " action");
 
     std::string redfishMessageID = "OpenBMC.0.1.IPMIWatchdog";
+
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
     std::string redfishMessage = "WatchDog";
     selAddSystemRecord(redfishMessageID, redfishMessage,
                        std::string(msg.get_path()), eventData, assert,
                        selBMCGenID);
 #else
-
     selAddSystemRecord(conn, journalMsg, std::string(msg.get_path()), eventData,
                        assert, selBMCGenID, "REDFISH_MESSAGE_ID=%s",
                        redfishMessageID.c_str(), "REDFISH_MESSAGE_ARGS=%s",
@@ -198,7 +198,7 @@ inline static void sendWatchdogEventLog(
   }
 }
 
-inline static sdbusplus::bus::match_t
+inline static sdbusplus::match
 startWatchdogEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
   auto watchdogEventMatcherCallback = [conn](sdbusplus::message_t &msg) {
     auto expiredAction = msg.unpack<std::string>();
@@ -209,7 +209,7 @@ startWatchdogEventMonitor(std::shared_ptr<sdbusplus::asio::connection> conn) {
     sendWatchdogEventLog(conn, msg, true, action);
   };
 
-  sdbusplus::bus::match_t watchdogEventMatcher(
+  sdbusplus::match watchdogEventMatcher(
       static_cast<sdbusplus::bus_t &>(*conn),
       "type='signal',interface='xyz.openbmc_project.Watchdog',"
       "member='Timeout'",

@@ -18,6 +18,9 @@
 #include <systemd/sd-journal.h>
 
 #include <sdbusplus/asio/connection.hpp>
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+#include <xyz/openbmc_project/Logging/Entry/server.hpp>
+#endif
 
 #include <filesystem>
 #include <string>
@@ -60,17 +63,29 @@ unsigned int getNewRecordId();
 #endif
 
 #ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
-#include "xyz/openbmc_project/Logging/Entry/server.hpp"
+using LoggingEntry = sdbusplus::xyz::openbmc_project::Logging::server::Entry;
+
+enum class eventReading : uint8_t {
+  lowerNonCritGoingLow = 0x00,
+  lowerCritGoingLow = 0x02,
+  upperNonCritGoingHigh = 0x07,
+  upperCritGoingHigh = 0x09
+};
+#endif
 
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 
+void toHexStr(const std::vector<uint8_t> &data, std::string &hexStr);
+
+#ifdef SEL_LOGGER_SEND_TO_LOGGING_SERVICE
+// Downstream: separate declaration for the logging-service path (uses
+// messageID)
 void selAddSystemRecord(const std::string &messageID,
                         const std::string &message, const std::string &path,
                         const std::vector<uint8_t> &selData, const bool &assert,
                         const uint16_t &genId);
 
-std::string getService(const std::string &path, const std::string &interface);
 constexpr auto mapperBus = "xyz.openbmc_project.ObjectMapper";
 constexpr auto mapperPath = "/xyz/openbmc_project/object_mapper";
 constexpr auto mapperInterface = "xyz.openbmc_project.ObjectMapper";
